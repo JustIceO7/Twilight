@@ -179,6 +179,20 @@ type QueueItem struct {
 	RequestedBy string // Username of who requested the song
 }
 
+var guildItems = make(map[string]*QueueData)
+var guildSessions = make(map[string]*SessionData)
+
+type QueueData struct {
+	Items       []*QueueItem
+	CurrentItem *QueueItem
+	mu          sync.Mutex
+}
+
+type SessionData struct {
+	Session *AudioSession
+	mu      sync.Mutex
+}
+
 type GuildQueue struct {
 	Items       []*QueueItem
 	CurrentItem *QueueItem
@@ -186,93 +200,131 @@ type GuildQueue struct {
 	mu          sync.Mutex
 }
 
-var guildQueues = make(map[string]*GuildQueue)
-
 func Enqueue(guildID, filename, username string) *GuildQueue {
-	gq, exists := guildQueues[guildID]
+	qd, exists := guildItems[guildID]
 	if !exists {
-		gq = &GuildQueue{
-			Items:   []*QueueItem{},
-			Session: &AudioSession{},
-		}
-		guildQueues[guildID] = gq
+		qd = &QueueData{Items: []*QueueItem{}}
+		guildItems[guildID] = qd
 	}
 
-	gq.mu.Lock()
-	defer gq.mu.Unlock()
-
-	if gq.Session.stopped {
-		gq.Session = &AudioSession{}
+	// Ensure SessionData exists
+	sd, exists := guildSessions[guildID]
+	if !exists {
+		sd = &SessionData{Session: &AudioSession{}}
+		guildSessions[guildID] = sd
 	}
 
-	gq.Items = append(gq.Items, &QueueItem{
+	qd.mu.Lock()
+	defer qd.mu.Unlock()
+
+	sd.mu.Lock()
+	if sd.Session.stopped {
+		sd.Session = &AudioSession{}
+	}
+	sd.mu.Unlock()
+
+	qd.Items = append(qd.Items, &QueueItem{
 		Filename:    filename,
 		RequestedBy: username,
 	})
-	return gq
+
+	return &GuildQueue{
+		Items:       qd.Items,
+		CurrentItem: qd.CurrentItem,
+		Session:     sd.Session,
+	}
 }
 
 // playNext plays the next song in the guilds music queue
 func PlayNext(s *discordgo.Session, guildID string, vc *discordgo.VoiceConnection) {
-	gq, exists := guildQueues[guildID]
+	qd, exists := guildItems[guildID]
+	if !exists {
+		return
+	}
+	sd, exists := guildSessions[guildID]
 	if !exists {
 		return
 	}
 
 	for {
-		gq.mu.Lock()
-		if len(gq.Items) == 0 {
-			gq.CurrentItem = nil // Clear current item when queue is empty
-			gq.mu.Unlock()
+		qd.mu.Lock()
+		if len(qd.Items) == 0 {
+			qd.CurrentItem = nil // Clear current item when queue is empty
+			qd.mu.Unlock()
 			break
 		}
 
-		item := gq.Items[0]
-		gq.Items = gq.Items[1:]
-		gq.CurrentItem = item
+		item := qd.Items[0]
+		qd.Items = qd.Items[1:]
+		qd.CurrentItem = item
+		qd.mu.Unlock()
 
-		// Reuse the existing session if possible
-		if gq.Session == nil || gq.Session.stopped {
-			gq.Session = &AudioSession{}
+		sd.mu.Lock()
+		if sd.Session == nil || sd.Session.stopped {
+			sd.Session = &AudioSession{}
 		}
-
-		// Update the VC for the session
-		gq.Session.mu.Lock()
-		gq.Session.VC = vc
-		gq.Session.mu.Unlock()
-
-		session := gq.Session
-		gq.mu.Unlock()
+		sd.Session.VC = vc
+		session := sd.Session
+		sd.mu.Unlock()
 
 		err := playAudioFile(vc, item.Filename, session)
 		if err != nil && err.Error() != "EOF" {
 			fmt.Printf("Playback error: %v\n", err)
 		}
 
-		// Clear current item after song finishes
-		gq.mu.Lock()
-		gq.CurrentItem = nil
-		gq.mu.Unlock()
+		qd.mu.Lock()
+		qd.CurrentItem = nil
+		qd.mu.Unlock()
 	}
 }
 
 func GetGuildQueue(guildID string) (*GuildQueue, bool) {
-	gq, exists := guildQueues[guildID]
-	return gq, exists
+	qd, qExists := guildItems[guildID]
+	sd, sExists := guildSessions[guildID]
+	if !qExists || !sExists {
+		return nil, false
+	}
+
+	qd.mu.Lock()
+	defer qd.mu.Unlock()
+	sd.mu.Lock()
+	defer sd.mu.Unlock()
+
+	itemsCopy := make([]*QueueItem, len(qd.Items))
+	copy(itemsCopy, qd.Items)
+
+	var currentCopy *QueueItem
+	if qd.CurrentItem != nil {
+		currentCopy = qd.CurrentItem
+	}
+
+	return &GuildQueue{
+		Items:       itemsCopy,
+		CurrentItem: currentCopy,
+		Session:     sd.Session,
+	}, true
 }
 
 func DeleteGuildQueue(guildID string) {
-	delete(guildQueues, guildID)
+	if sd, exists := guildSessions[guildID]; exists {
+		sd.mu.Lock()
+		if sd.Session != nil {
+			sd.Session.Stop()
+		}
+		sd.mu.Unlock()
+		delete(guildSessions, guildID)
+	}
+	delete(guildItems, guildID)
 }
 
 // ClearCurrentItem clears the currently playing item for a guild
 func ClearCurrentItem(guildID string) {
-	gq, exists := guildQueues[guildID]
+	qd, exists := guildItems[guildID]
 	if !exists {
 		return
 	}
 
-	gq.mu.Lock()
-	gq.CurrentItem = nil
-	gq.mu.Unlock()
+	qd.mu.Lock()
+	qd.CurrentItem = nil
+	qd.mu.Unlock()
 }
