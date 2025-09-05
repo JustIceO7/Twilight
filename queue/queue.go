@@ -23,18 +23,21 @@ type AudioSession struct {
 	stopped     bool                       // True if session has been stopped already
 }
 
+// Pause sets the audio session to paused, stopping audio playback temporarily
 func (s *AudioSession) Pause() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.IsPaused = true
 }
 
+// Resume unpauses the audio session, allowing playback to continue
 func (s *AudioSession) Resume() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.IsPaused = false
 }
 
+// Stop completely stops the audio session, kills ffmpeg, clears buffers, and ends playback
 func (s *AudioSession) Stop() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -179,27 +182,28 @@ type QueueItem struct {
 	RequestedBy string // Username of who requested the song
 }
 
-var guildItems = make(map[string]*QueueData)
-var guildSessions = make(map[string]*SessionData)
+var guildItems = make(map[string]*QueueData)      // Maps guild ID to its queue data
+var guildSessions = make(map[string]*SessionData) // Maps guild ID to its audio session
 
 type QueueData struct {
-	Items       []*QueueItem
-	CurrentItem *QueueItem
-	mu          sync.Mutex
+	Items       []*QueueItem // List of queued songs
+	CurrentItem *QueueItem   // Currently playing song
+	mu          sync.Mutex   // Mutex to protect concurrent access
 }
 
 type SessionData struct {
-	Session *AudioSession
-	mu      sync.Mutex
+	Session *AudioSession // Audio session for this guild
+	mu      sync.Mutex    // Mutex to protect concurrent access
 }
 
 type GuildQueue struct {
-	Items       []*QueueItem
-	CurrentItem *QueueItem
-	Session     *AudioSession
-	mu          sync.Mutex
+	Items       []*QueueItem  // Copy of queued songs
+	CurrentItem *QueueItem    // Copy of currently playing song
+	Session     *AudioSession // Copy of the current audio session
+	mu          sync.Mutex    // Mutex to protect concurrent access
 }
 
+// Enqueue queues a song into the queue for a given guild
 func Enqueue(guildID, filename, username string) *GuildQueue {
 	qd, exists := guildItems[guildID]
 	if !exists {
@@ -278,6 +282,7 @@ func PlayNext(s *discordgo.Session, guildID string, vc *discordgo.VoiceConnectio
 	}
 }
 
+// GetGuildQueue returns the full queue for a given guild
 func GetGuildQueue(guildID string) (*GuildQueue, bool) {
 	qd, qExists := guildItems[guildID]
 	sd, sExists := guildSessions[guildID]
@@ -305,6 +310,7 @@ func GetGuildQueue(guildID string) (*GuildQueue, bool) {
 	}, true
 }
 
+// DeleteGuildQueue removes the guild from guildItems and guildSessions
 func DeleteGuildQueue(guildID string) {
 	if sd, exists := guildSessions[guildID]; exists {
 		sd.mu.Lock()
