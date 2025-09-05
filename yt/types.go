@@ -1,4 +1,4 @@
-package music
+package yt
 
 import "time"
 

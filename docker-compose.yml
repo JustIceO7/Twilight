@@ -12,6 +12,9 @@ services:
     depends_on:
       - postgres
       - redis
+    volumes:
+      - cache_data:/app/cache 
+      - /tmp:/tmp             
 
   postgres:
     image: postgres:14-alpine
@@ -36,3 +39,4 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  cache_data:

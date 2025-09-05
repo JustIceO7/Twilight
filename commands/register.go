@@ -24,7 +24,7 @@ func RegisterSlashCommands(s *discordgo.Session) {
 				},
 			},
 		},
-		nil,
+		playMusic,
 	)
 
 	commands.Add(
@@ -32,7 +32,7 @@ func RegisterSlashCommands(s *discordgo.Session) {
 			Name:        "pause",
 			Description: "Pause the current song.",
 		},
-		nil,
+		pauseMusic,
 	)
 
 	commands.Add(
@@ -40,7 +40,7 @@ func RegisterSlashCommands(s *discordgo.Session) {
 			Name:        "resume",
 			Description: "Resume the paused song.",
 		},
-		nil,
+		resumeMusic,
 	)
 
 	commands.Add(
@@ -48,7 +48,7 @@ func RegisterSlashCommands(s *discordgo.Session) {
 			Name:        "skip",
 			Description: "Skip the current song.",
 		},
-		nil,
+		skipMusic,
 	)
 
 	commands.Add(
@@ -80,7 +80,7 @@ func RegisterSlashCommands(s *discordgo.Session) {
 			Name:        "disconnect",
 			Description: "Disconnect the bot from voice chat.",
 		},
-		nil,
+		stopMusic,
 	)
 
 	commands.Add(
@@ -88,8 +88,12 @@ func RegisterSlashCommands(s *discordgo.Session) {
 			Name:        "leave",
 			Description: "Disconnect the bot from voice chat.",
 		},
-		nil,
+		stopMusic,
 	)
+
+	if err := commands.Register(s); err != nil {
+		log.WithError(err).Error("Failed to register slash commands")
+	}
 }
 
 type CommandHandler func(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate) *interactionError

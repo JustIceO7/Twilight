@@ -1,4 +1,4 @@
-package music
+package yt
 
 import (
 	"io"
@@ -6,8 +6,8 @@ import (
 	"github.com/kkdai/youtube/v2"
 )
 
-// fetchVideoStream fetches the audio from a given videoID and returns a stream
-func fetchVideoStream(videoID string) (io.ReadCloser, error) {
+// FetchVideoStream fetches the audio from a given videoID and returns a stream
+func FetchVideoStream(videoID string) (io.ReadCloser, error) {
 	client := youtube.Client{}
 
 	video, err := client.GetVideo(videoID)
@@ -24,6 +24,6 @@ func fetchVideoStream(videoID string) (io.ReadCloser, error) {
 	return stream, nil
 }
 
-func fetchVideoMetadata(videoID string) {
+func FetchVideoMetadata(videoID string) {
 
 }

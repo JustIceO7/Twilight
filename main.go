@@ -1,7 +1,9 @@
 package main
 
 import (
+	"Twilight/commands"
 	"Twilight/config"
+	"Twilight/handlers"
 	"flag"
 	"os"
 	"os/signal"
@@ -37,6 +39,12 @@ func main() {
 	s.AddHandler(func(s *discordgo.Session, r *discordgo.Ready) {
 		log.Info("Bot has registered handlers")
 	})
+
+	// Configuring Intents and Adding Handlers
+	handlers.HandlerConfig(s)
+
+	// Register Slash and Component Commands
+	commands.RegisterSlashCommands(s)
 
 	// Connecting to Discord Server Gateway
 	s.Open()
