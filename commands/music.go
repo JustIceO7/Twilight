@@ -5,248 +5,14 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
-	"sync"
-	"time"
+	"strings"
 
+	"Twilight/queue"
 	"Twilight/yt"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/kkdai/youtube/v2"
-	"layeh.com/gopus"
 )
-
-type AudioSession struct {
-	VC          *discordgo.VoiceConnection // Discord voice connection for this session
-	Cmd         *exec.Cmd                  // ffmpeg process converting audio to PCM
-	Encoder     *gopus.Encoder             // Opus encoder for sending audio to Discord
-	PcmBuffer   []byte                     // Buffer for raw audio bytes from ffmpeg
-	Int16Buffer []int16                    // Buffer for PCM audio as 16-bit samples
-	IsPaused    bool                       // True if playback is paused
-	mu          sync.Mutex                 // Mutex to protect concurrent access
-	stop        chan struct{}              // Channel to signal stopping the session
-	stopped     bool                       // True if session has been stopped already
-}
-
-func (s *AudioSession) Pause() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.IsPaused = true
-}
-
-func (s *AudioSession) Resume() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.IsPaused = false
-}
-
-func (s *AudioSession) Stop() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.stopped {
-		return
-	}
-	s.stopped = true
-
-	if s.stop != nil {
-		close(s.stop)
-	}
-	if s.Cmd != nil && s.Cmd.Process != nil {
-		s.Cmd.Process.Kill()
-		s.Cmd.Wait()
-	}
-	if s.VC != nil {
-		s.VC.Speaking(false)
-	}
-
-	s.PcmBuffer = nil
-	s.Int16Buffer = nil
-	s.Encoder = nil
-}
-
-// playAudioFile streams audio to Discord
-func playAudioFile(vc *discordgo.VoiceConnection, filename string, session *AudioSession) error {
-	if !vc.Ready {
-		for i := 0; i < 20; i++ {
-			time.Sleep(250 * time.Millisecond)
-			if vc.Ready {
-				break
-			}
-		}
-		if !vc.Ready {
-			return fmt.Errorf("voice connection never became ready")
-		}
-	}
-
-	vc.Speaking(true)
-	defer vc.Speaking(false)
-
-	cmd := exec.Command("ffmpeg",
-		"-i", filename,
-		"-f", "s16le",
-		"-ar", "48000",
-		"-ac", "2",
-		"pipe:1",
-	)
-
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return err
-	}
-
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-
-	encoder, err := gopus.NewEncoder(48000, 2, gopus.Audio)
-	if err != nil {
-		cmd.Process.Kill()
-		return err
-	}
-
-	pcmBuffer := make([]byte, 3840)
-	int16Buffer := make([]int16, 1920*2)
-	stop := make(chan struct{})
-
-	session.mu.Lock()
-	session.VC = vc
-	session.Cmd = cmd
-	session.Encoder = encoder
-	session.PcmBuffer = pcmBuffer
-	session.Int16Buffer = int16Buffer
-	session.IsPaused = false
-	session.stop = stop
-	session.stopped = false
-	session.mu.Unlock()
-
-	defer session.Stop()
-
-	pcmCache := []int16{}
-
-	for {
-		select {
-		case <-stop:
-			return nil
-		default:
-		}
-
-		session.mu.Lock()
-		paused := session.IsPaused
-		session.mu.Unlock()
-
-		if paused {
-			time.Sleep(100 * time.Millisecond)
-			continue
-		}
-
-		n, err := stdout.Read(pcmBuffer)
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			return err
-		}
-
-		for i := 0; i < n; i += 2 {
-			if i+1 < n {
-				sample := int16(pcmBuffer[i]) | int16(pcmBuffer[i+1])<<8
-				pcmCache = append(pcmCache, sample)
-			}
-		}
-
-		for len(pcmCache) >= 960*2 { // 960 samples per channel, 2 channels
-			frame := pcmCache[:960*2]
-			pcmCache = pcmCache[960*2:]
-
-			opusFrame, err := encoder.Encode(frame, 960, 4000)
-			if err != nil {
-				return err
-			}
-
-			if len(opusFrame) > 0 {
-				select {
-				case vc.OpusSend <- opusFrame:
-				case <-time.After(100 * time.Millisecond):
-					return fmt.Errorf("timeout sending opus frame")
-				case <-stop:
-					return nil
-				}
-			}
-		}
-	}
-
-	return cmd.Wait()
-}
-
-type QueueItem struct {
-	Filename    string // Path to the audio file
-	RequestedBy string // Username of who requested the song
-}
-
-type GuildQueue struct {
-	Items   []*QueueItem
-	Session *AudioSession
-	mu      sync.Mutex
-}
-
-var guildQueues = make(map[string]*GuildQueue)
-
-func enqueue(guildID, filename, username string) *GuildQueue {
-	gq, exists := guildQueues[guildID]
-	if !exists {
-		gq = &GuildQueue{
-			Items:   []*QueueItem{},
-			Session: &AudioSession{},
-		}
-		guildQueues[guildID] = gq
-	}
-
-	gq.mu.Lock()
-	defer gq.mu.Unlock()
-
-	if gq.Session.stopped {
-		gq.Session = &AudioSession{}
-	}
-
-	gq.Items = append(gq.Items, &QueueItem{
-		Filename:    filename,
-		RequestedBy: username,
-	})
-	return gq
-}
-
-// playNext plays the next song in the guilds music queue
-func playNext(s *discordgo.Session, guildID string, vc *discordgo.VoiceConnection) {
-	gq, exists := guildQueues[guildID]
-	if !exists {
-		return
-	}
-
-	for {
-		gq.mu.Lock()
-		if len(gq.Items) == 0 {
-			gq.mu.Unlock()
-			break
-		}
-
-		item := gq.Items[0]
-		gq.Items = gq.Items[1:]
-
-		if gq.Session != nil {
-			gq.Session.Stop()
-		}
-
-		session := &AudioSession{}
-		gq.Session = session
-		gq.mu.Unlock()
-
-		err := playAudioFile(vc, item.Filename, session)
-		if err != nil && err.Error() != "EOF" {
-			fmt.Printf("Playback error: %v\n", err)
-		}
-	}
-}
 
 // playMusic plays the music given a link, adding the music to the music queue
 func playMusic(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate) *interactionError {
@@ -275,10 +41,31 @@ func playMusic(ctx context.Context, s *discordgo.Session, i *discordgo.Interacti
 		}
 	}
 
+	videoURL := i.ApplicationCommandData().Options[0].StringValue()
+	videoID, err := youtube.ExtractVideoID(videoURL)
+	if err != nil {
+		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{Content: "❌ Invalid YouTube link!"},
+		})
+		return nil
+	}
+
+	client := youtube.Client{}
+	_, err = client.GetVideo(videoID)
+	if err != nil {
+		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{Content: "❌ Could not fetch the video. It may be private or removed."},
+		})
+		return nil
+	}
+
+	currentVideo, _ := yt.FetchVideoMetadata(videoID)
 	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
-			Content: "Adding your track... 🎶",
+			Content: fmt.Sprintf("🎵 Adding **%s** to the queue...", currentVideo.Title),
 		},
 	})
 	if err != nil {
@@ -286,12 +73,6 @@ func playMusic(ctx context.Context, s *discordgo.Session, i *discordgo.Interacti
 	}
 
 	vc, err := connectUserVoiceChannel(s, i.GuildID, i.Member.User.ID)
-	if err != nil {
-		return nil
-	}
-
-	videoURL := i.ApplicationCommandData().Options[0].StringValue()
-	videoID, err := youtube.ExtractVideoID(videoURL)
 	if err != nil {
 		return nil
 	}
@@ -319,9 +100,9 @@ func playMusic(ctx context.Context, s *discordgo.Session, i *discordgo.Interacti
 		}
 	}
 
-	gq := enqueue(i.GuildID, filename, i.Member.User.Username)
+	gq := queue.Enqueue(i.GuildID, filename, i.Member.User.Username)
 	if gq.Session.VC == nil {
-		go playNext(s, i.GuildID, vc)
+		go queue.PlayNext(s, i.GuildID, vc)
 	}
 
 	return nil
@@ -329,7 +110,7 @@ func playMusic(ctx context.Context, s *discordgo.Session, i *discordgo.Interacti
 
 // pauseMusic pauses the current music
 func pauseMusic(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate) *interactionError {
-	gq, ok := guildQueues[i.GuildID]
+	gq, ok := queue.GetGuildQueue(i.GuildID)
 	if !ok || gq.Session.VC == nil {
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -347,7 +128,7 @@ func pauseMusic(ctx context.Context, s *discordgo.Session, i *discordgo.Interact
 
 // resumeMusic resumes the current music
 func resumeMusic(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate) *interactionError {
-	gq, ok := guildQueues[i.GuildID]
+	gq, ok := queue.GetGuildQueue(i.GuildID)
 	if !ok || gq.Session.VC == nil {
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -365,7 +146,7 @@ func resumeMusic(ctx context.Context, s *discordgo.Session, i *discordgo.Interac
 
 // stopMusic stops the current session and disconnects the bot from the voice channel
 func stopMusic(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate) *interactionError {
-	gq, ok := guildQueues[i.GuildID]
+	gq, ok := queue.GetGuildQueue(i.GuildID)
 	if !ok {
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -379,7 +160,9 @@ func stopMusic(ctx context.Context, s *discordgo.Session, i *discordgo.Interacti
 		gq.Session.VC.Disconnect()
 	}
 
-	delete(guildQueues, i.GuildID)
+	queue.ClearCurrentItem(i.GuildID)
+
+	queue.DeleteGuildQueue(i.GuildID)
 	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{Content: "⏹️ Stopped"},
@@ -389,7 +172,7 @@ func stopMusic(ctx context.Context, s *discordgo.Session, i *discordgo.Interacti
 
 // skipMusic skips the current music playing and moves on to the next
 func skipMusic(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate) *interactionError {
-	gq, ok := guildQueues[i.GuildID]
+	gq, ok := queue.GetGuildQueue(i.GuildID)
 	if !ok || gq.Session.VC == nil {
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -405,5 +188,99 @@ func skipMusic(ctx context.Context, s *discordgo.Session, i *discordgo.Interacti
 		Data: &discordgo.InteractionResponseData{Content: "⏭️ Skipped"},
 	})
 
+	return nil
+}
+
+// currentMusic displays the current music being played
+func currentMusic(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate) *interactionError {
+	gq, ok := queue.GetGuildQueue(i.GuildID)
+	if !ok || gq.Session.VC == nil || gq.CurrentItem == nil {
+		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{Content: "🎶 Nothing is playing right now 😶"},
+		})
+		return nil
+	}
+
+	currentItem := gq.CurrentItem
+	status := "▶️ Playing"
+	if gq.Session.IsPaused {
+		status = "⏸️ Paused"
+	}
+
+	currentID := strings.TrimSuffix(strings.TrimPrefix(currentItem.Filename, "cache/"), ".mp3")
+	currentVideo, _ := yt.FetchVideoMetadata(currentID)
+
+	thumbnailURL := ""
+	if len(currentVideo.Thumbnails) > 0 {
+		thumbnailURL = currentVideo.Thumbnails[0].URL
+	}
+	videoURL := fmt.Sprintf("https://www.youtube.com/watch?v=%s", currentID)
+
+	embed := &discordgo.MessageEmbed{
+		Title:       fmt.Sprintf("🎵 Now Playing: %s", currentVideo.Title),
+		URL:         videoURL,
+		Description: fmt.Sprintf("Requested by: %s\nStatus: %s", currentItem.RequestedBy, status),
+		Thumbnail:   &discordgo.MessageEmbedThumbnail{URL: thumbnailURL},
+	}
+
+	if len(gq.Items) > 0 {
+		queueText := "**Up Next:**\n"
+		queueLimit := len(gq.Items)
+		if queueLimit > 5 {
+			queueLimit = 5
+		}
+		for idx, item := range gq.Items[:queueLimit] {
+			itemID := strings.TrimSuffix(strings.TrimPrefix(item.Filename, "cache/"), ".mp3")
+			video, _ := yt.FetchVideoMetadata(itemID)
+			queueText += fmt.Sprintf("%d. `%s` (requested by %s)\n", idx+1, video.Title, item.RequestedBy)
+		}
+		if len(gq.Items) > 5 {
+			queueText += fmt.Sprintf("...and %d more", len(gq.Items)-5)
+		}
+		embed.Fields = []*discordgo.MessageEmbedField{
+			{
+				Name:  "Queue",
+				Value: queueText,
+			},
+		}
+	}
+
+	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{embed},
+		},
+	})
+	return nil
+}
+
+// currentQueue shows the list of songs in the queue
+func currentQueue(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate) *interactionError {
+	gq, ok := queue.GetGuildQueue(i.GuildID)
+	if !ok || gq.Session.VC == nil || gq.CurrentItem == nil {
+		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{Content: "🎶 The queue is empty 😶"},
+		})
+		return nil
+	}
+
+	queueText := "**Current Queue:**\n"
+
+	currentID := strings.TrimSuffix(strings.TrimPrefix(gq.CurrentItem.Filename, "cache/"), ".mp3")
+	currentVideo, _ := yt.FetchVideoMetadata(currentID)
+	queueText += fmt.Sprintf("1. `%s` (requested by %s) ▶️\n", currentVideo.Title, gq.CurrentItem.RequestedBy)
+
+	for idx, item := range gq.Items {
+		itemID := strings.TrimSuffix(strings.TrimPrefix(item.Filename, "cache/"), ".mp3")
+		video, _ := yt.FetchVideoMetadata(itemID)
+		queueText += fmt.Sprintf("%d. `%s` (requested by %s)\n", idx+2, video.Title, item.RequestedBy)
+	}
+
+	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{Content: queueText},
+	})
 	return nil
 }

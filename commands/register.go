@@ -56,7 +56,7 @@ func RegisterSlashCommands(s *discordgo.Session) {
 			Name:        "queue",
 			Description: "Show the current song queue.",
 		},
-		nil,
+		currentQueue,
 	)
 
 	commands.Add(
@@ -64,7 +64,7 @@ func RegisterSlashCommands(s *discordgo.Session) {
 			Name:        "np",
 			Description: "Show the song that’s now playing.",
 		},
-		nil,
+		currentMusic,
 	)
 
 	commands.Add(

@@ -24,6 +24,14 @@ func FetchVideoStream(videoID string) (io.ReadCloser, error) {
 	return stream, nil
 }
 
-func FetchVideoMetadata(videoID string) {
+// FetchVideoMetadata fetches basic metadata for a given videoID
+func FetchVideoMetadata(videoID string) (*youtube.Video, error) {
+	client := youtube.Client{}
 
+	video, err := client.GetVideo(videoID)
+	if err != nil {
+		return nil, err
+	}
+
+	return video, nil
 }
