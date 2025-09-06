@@ -4,10 +4,12 @@ import (
 	"Twilight/commands"
 	"Twilight/config"
 	"Twilight/handlers"
+	"Twilight/queue"
 	"flag"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/Strum355/log"
 	"github.com/bwmarrin/discordgo"
@@ -53,6 +55,41 @@ func main() {
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM)
 	<-sc
-	log.Info("Cleanly exiting")
+	gracefulShutdown(s)
+}
+
+func gracefulShutdown(s *discordgo.Session) {
+	log.Info("Starting graceful shutdown...")
+
+	queue.StopAllSessions()
+
+	for _, vc := range s.VoiceConnections {
+		if vc != nil {
+			vc.Disconnect()
+		}
+	}
+
+	time.Sleep(5 * time.Second)
+
 	s.Close()
+
+	cleanUpCache()
+
+	log.Info("Cleanly exiting")
+}
+
+// cleanUpCache removes old cached audio files
+func cleanUpCache() {
+	cacheDir := "cache"
+	if _, err := os.Stat(cacheDir); os.IsNotExist(err) {
+		return
+	}
+
+	files, _ := os.ReadDir(cacheDir)
+
+	for _, file := range files {
+		_ = os.RemoveAll(cacheDir + "/" + file.Name())
+	}
+
+	log.Info("Cache cleanup completed")
 }

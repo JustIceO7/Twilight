@@ -4,6 +4,7 @@ import (
 	"Twilight/redis_client"
 	"encoding/json"
 	"io"
+	"time"
 
 	"github.com/kkdai/youtube/v2"
 )
@@ -45,7 +46,7 @@ func FetchVideoMetadata(videoID string) (*youtube.Video, error) {
 
 	// Store in Redis
 	data, _ := json.Marshal(video)
-	redis_client.RDB.Set(redis_client.Ctx, "ytmeta:"+videoID, data, 3600) // 1 hour TTL
+	redis_client.RDB.Set(redis_client.Ctx, "ytmeta:"+videoID, data, 3600*time.Second) // 1 hour TTL
 
 	return video, nil
 }

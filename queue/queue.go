@@ -334,3 +334,27 @@ func ClearCurrentItem(guildID string) {
 	qd.CurrentItem = nil
 	qd.mu.Unlock()
 }
+
+// StopAllSessions clears data for all guilds and closes all Sessions
+func StopAllSessions() {
+	// Stop all sessions
+	for _, sd := range guildSessions {
+		if sd != nil {
+			sd.mu.Lock()
+			if sd.Session != nil && !sd.Session.stopped {
+				sd.Session.Stop()
+			}
+			sd.mu.Unlock()
+		}
+	}
+
+	// Clear all queue data
+	for guildID := range guildItems {
+		delete(guildItems, guildID)
+	}
+
+	// Clear all session data
+	for guildID := range guildSessions {
+		delete(guildSessions, guildID)
+	}
+}
