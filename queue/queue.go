@@ -21,6 +21,7 @@ type AudioSession struct {
 	IsPaused    bool                       // True if playback is paused
 	mu          sync.Mutex                 // Mutex to protect concurrent access
 	stop        chan struct{}              // Channel to signal stopping the session
+	resume      chan struct{}              // Channel to signal resuming from pause
 	stopped     bool                       // True if session has been stopped already
 }
 
@@ -28,14 +29,21 @@ type AudioSession struct {
 func (s *AudioSession) Pause() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.IsPaused = true
+	if !s.IsPaused {
+		s.IsPaused = true
+		s.resume = make(chan struct{})
+	}
 }
 
 // Resume unpauses the audio session, allowing playback to continue
 func (s *AudioSession) Resume() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.IsPaused = false
+	if s.IsPaused {
+		close(s.resume)
+		s.IsPaused = false
+		s.resume = nil
+	}
 }
 
 // Stop completely stops the audio session, kills ffmpeg, clears buffers, and ends playback
@@ -75,7 +83,7 @@ func playAudioFile(vc *discordgo.VoiceConnection, filename string, session *Audi
 
 	if !vc.Ready {
 		for i := 0; i < 20; i++ {
-			time.Sleep(250 * time.Millisecond)
+			time.Sleep(100 * time.Millisecond)
 			if vc.Ready {
 				break
 			}
@@ -127,8 +135,13 @@ func playAudioFile(vc *discordgo.VoiceConnection, filename string, session *Audi
 	for {
 		session.mu.Lock()
 		if session.IsPaused {
+			resume := session.resume
 			session.mu.Unlock()
-			time.Sleep(100 * time.Millisecond)
+			select {
+			case <-resume:
+			case <-session.stop:
+				return nil
+			}
 			continue
 		}
 		session.mu.Unlock()
@@ -149,7 +162,7 @@ func playAudioFile(vc *discordgo.VoiceConnection, filename string, session *Audi
 		if len(opus) > 0 {
 			select {
 			case vc.OpusSend <- opus:
-			case <-time.After(100 * time.Millisecond):
+			case <-time.After(50 * time.Millisecond):
 				return fmt.Errorf("timeout sending opus frame")
 			case <-stop:
 				return nil
@@ -224,7 +237,7 @@ func Enqueue(guildID, filename, username string) *GuildQueue {
 	}
 }
 
-// playNext plays the next song in the guilds music queue
+// playNext plays the next song in the guilds song queue
 func PlayNext(s *discordgo.Session, guildID string, vc *discordgo.VoiceConnection) {
 	qd, exists := guildItems[guildID]
 	if !exists {

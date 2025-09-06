@@ -14,8 +14,8 @@ import (
 	"github.com/kkdai/youtube/v2"
 )
 
-// playMusic plays the music given a link, adding the music to the music queue
-func playMusic(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate) *interactionError {
+// playSong plays the song given a link, adding the song to the song queue
+func playSong(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate) *interactionError {
 	// Get user's current voice channel
 	vs, err := s.State.VoiceState(i.GuildID, i.Member.User.ID)
 	if err != nil || vs == nil || vs.ChannelID == "" {
@@ -108,8 +108,8 @@ func playMusic(ctx context.Context, s *discordgo.Session, i *discordgo.Interacti
 	return nil
 }
 
-// pauseMusic pauses the current music
-func pauseMusic(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate) *interactionError {
+// pauseSong pauses the current song
+func pauseSong(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate) *interactionError {
 	gq, ok := queue.GetGuildQueue(i.GuildID)
 	if !ok || gq.Session.VC == nil {
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -126,8 +126,8 @@ func pauseMusic(ctx context.Context, s *discordgo.Session, i *discordgo.Interact
 	return nil
 }
 
-// resumeMusic resumes the current music
-func resumeMusic(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate) *interactionError {
+// resumeSong resumes the current song
+func resumeSong(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate) *interactionError {
 	gq, ok := queue.GetGuildQueue(i.GuildID)
 	if !ok || gq.Session.VC == nil {
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -144,8 +144,8 @@ func resumeMusic(ctx context.Context, s *discordgo.Session, i *discordgo.Interac
 	return nil
 }
 
-// stopMusic stops the current session and disconnects the bot from the voice channel
-func stopMusic(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate) *interactionError {
+// stopSong stops the current session and disconnects the bot from the voice channel
+func stopSong(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate) *interactionError {
 	gq, ok := queue.GetGuildQueue(i.GuildID)
 	if !ok {
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -170,8 +170,8 @@ func stopMusic(ctx context.Context, s *discordgo.Session, i *discordgo.Interacti
 	return nil
 }
 
-// skipMusic skips the current music playing and moves on to the next
-func skipMusic(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate) *interactionError {
+// skipSong skips the current song playing and moves on to the next
+func skipSong(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate) *interactionError {
 	gq, ok := queue.GetGuildQueue(i.GuildID)
 	if !ok || gq.Session.VC == nil {
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -191,8 +191,8 @@ func skipMusic(ctx context.Context, s *discordgo.Session, i *discordgo.Interacti
 	return nil
 }
 
-// currentMusic displays the current music being played
-func currentMusic(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate) *interactionError {
+// currentSong displays the current song being played
+func currentSong(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate) *interactionError {
 	gq, ok := queue.GetGuildQueue(i.GuildID)
 	if !ok || gq.Session.VC == nil || gq.CurrentItem == nil {
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -255,7 +255,7 @@ func currentMusic(ctx context.Context, s *discordgo.Session, i *discordgo.Intera
 	return nil
 }
 
-// currentQueue shows the list of songs in the queue
+// currentQueue shows the list of songs in the queue using an embed
 func currentQueue(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate) *interactionError {
 	gq, ok := queue.GetGuildQueue(i.GuildID)
 	if !ok || gq.Session.VC == nil || gq.CurrentItem == nil {
@@ -266,8 +266,11 @@ func currentQueue(ctx context.Context, s *discordgo.Session, i *discordgo.Intera
 		return nil
 	}
 
-	queueText := "**Current Queue:**\n"
+	embed := &discordgo.MessageEmbed{
+		Title: fmt.Sprintf("🎶 Queue for %s", i.GuildID),
+	}
 
+	queueText := ""
 	currentID := strings.TrimSuffix(strings.TrimPrefix(gq.CurrentItem.Filename, "cache/"), ".mp3")
 	currentVideo, _ := yt.FetchVideoMetadata(currentID)
 	queueText += fmt.Sprintf("1. `%s` (requested by %s) ▶️\n", currentVideo.Title, gq.CurrentItem.RequestedBy)
@@ -278,9 +281,18 @@ func currentQueue(ctx context.Context, s *discordgo.Session, i *discordgo.Intera
 		queueText += fmt.Sprintf("%d. `%s` (requested by %s)\n", idx+2, video.Title, item.RequestedBy)
 	}
 
+	embed.Fields = []*discordgo.MessageEmbedField{
+		{
+			Name:  "Queue",
+			Value: queueText,
+		},
+	}
+
 	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{Content: queueText},
+		Data: &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{embed},
+		},
 	})
 	return nil
 }

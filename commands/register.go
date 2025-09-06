@@ -24,7 +24,7 @@ func RegisterSlashCommands(s *discordgo.Session) {
 				},
 			},
 		},
-		playMusic,
+		playSong,
 	)
 
 	commands.Add(
@@ -32,7 +32,7 @@ func RegisterSlashCommands(s *discordgo.Session) {
 			Name:        "pause",
 			Description: "Pause the current song.",
 		},
-		pauseMusic,
+		pauseSong,
 	)
 
 	commands.Add(
@@ -40,7 +40,7 @@ func RegisterSlashCommands(s *discordgo.Session) {
 			Name:        "resume",
 			Description: "Resume the paused song.",
 		},
-		resumeMusic,
+		resumeSong,
 	)
 
 	commands.Add(
@@ -48,7 +48,7 @@ func RegisterSlashCommands(s *discordgo.Session) {
 			Name:        "skip",
 			Description: "Skip the current song.",
 		},
-		skipMusic,
+		skipSong,
 	)
 
 	commands.Add(
@@ -64,7 +64,7 @@ func RegisterSlashCommands(s *discordgo.Session) {
 			Name:        "np",
 			Description: "Show the song that’s now playing.",
 		},
-		currentMusic,
+		currentSong,
 	)
 
 	commands.Add(
@@ -94,7 +94,7 @@ func RegisterSlashCommands(s *discordgo.Session) {
 			Name:        "disconnect",
 			Description: "Disconnect the bot from voice chat.",
 		},
-		stopMusic,
+		stopSong,
 	)
 
 	commands.Add(
@@ -102,7 +102,7 @@ func RegisterSlashCommands(s *discordgo.Session) {
 			Name:        "leave",
 			Description: "Disconnect the bot from voice chat.",
 		},
-		stopMusic,
+		stopSong,
 	)
 
 	if err := commands.Register(s); err != nil {
