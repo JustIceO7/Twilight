@@ -1,6 +1,7 @@
 package queue
 
 import (
+	"encoding/binary"
 	"fmt"
 	"io"
 	"os/exec"
@@ -65,6 +66,13 @@ func (s *AudioSession) Stop() {
 
 // playAudioFile streams audio to Discord
 func playAudioFile(vc *discordgo.VoiceConnection, filename string, session *AudioSession) error {
+	const (
+		sampleRate       = 48000
+		channels         = 2
+		frameSize        = 960
+		maxOpusFrameSize = 4000
+	)
+
 	if !vc.Ready {
 		for i := 0; i < 20; i++ {
 			time.Sleep(250 * time.Millisecond)
@@ -83,8 +91,8 @@ func playAudioFile(vc *discordgo.VoiceConnection, filename string, session *Audi
 	cmd := exec.Command("ffmpeg",
 		"-i", filename,
 		"-f", "s16le",
-		"-ar", "48000",
-		"-ac", "2",
+		"-ar", fmt.Sprintf("%d", sampleRate),
+		"-ac", fmt.Sprintf("%d", channels),
 		"pipe:1",
 	)
 
@@ -92,27 +100,23 @@ func playAudioFile(vc *discordgo.VoiceConnection, filename string, session *Audi
 	if err != nil {
 		return err
 	}
-
 	if err := cmd.Start(); err != nil {
 		return err
 	}
 
-	encoder, err := gopus.NewEncoder(48000, 2, gopus.Audio)
+	encoder, err := gopus.NewEncoder(sampleRate, channels, gopus.Audio)
 	if err != nil {
 		cmd.Process.Kill()
 		return err
 	}
 
-	pcmBuffer := make([]byte, 3840)
-	int16Buffer := make([]int16, 1920*2)
+	buf := make([]int16, frameSize*channels)
 	stop := make(chan struct{})
 
 	session.mu.Lock()
 	session.VC = vc
 	session.Cmd = cmd
 	session.Encoder = encoder
-	session.PcmBuffer = pcmBuffer
-	session.Int16Buffer = int16Buffer
 	session.IsPaused = false
 	session.stop = stop
 	session.stopped = false
@@ -120,25 +124,16 @@ func playAudioFile(vc *discordgo.VoiceConnection, filename string, session *Audi
 
 	defer session.Stop()
 
-	pcmCache := []int16{}
-
 	for {
-		select {
-		case <-stop:
-			return nil
-		default:
-		}
-
 		session.mu.Lock()
-		paused := session.IsPaused
-		session.mu.Unlock()
-
-		if paused {
+		if session.IsPaused {
+			session.mu.Unlock()
 			time.Sleep(100 * time.Millisecond)
 			continue
 		}
+		session.mu.Unlock()
 
-		n, err := stdout.Read(pcmBuffer)
+		err := binary.Read(stdout, binary.LittleEndian, buf)
 		if err != nil {
 			if err == io.EOF {
 				break
@@ -146,30 +141,18 @@ func playAudioFile(vc *discordgo.VoiceConnection, filename string, session *Audi
 			return err
 		}
 
-		for i := 0; i < n; i += 2 {
-			if i+1 < n {
-				sample := int16(pcmBuffer[i]) | int16(pcmBuffer[i+1])<<8
-				pcmCache = append(pcmCache, sample)
-			}
+		opus, err := encoder.Encode(buf, frameSize, maxOpusFrameSize)
+		if err != nil {
+			return err
 		}
 
-		for len(pcmCache) >= 960*2 { // 960 samples per channel, 2 channels
-			frame := pcmCache[:960*2]
-			pcmCache = pcmCache[960*2:]
-
-			opusFrame, err := encoder.Encode(frame, 960, 4000)
-			if err != nil {
-				return err
-			}
-
-			if len(opusFrame) > 0 {
-				select {
-				case vc.OpusSend <- opusFrame:
-				case <-time.After(100 * time.Millisecond):
-					return fmt.Errorf("timeout sending opus frame")
-				case <-stop:
-					return nil
-				}
+		if len(opus) > 0 {
+			select {
+			case vc.OpusSend <- opus:
+			case <-time.After(100 * time.Millisecond):
+				return fmt.Errorf("timeout sending opus frame")
+			case <-stop:
+				return nil
 			}
 		}
 	}
@@ -182,8 +165,10 @@ type QueueItem struct {
 	RequestedBy string // Username of who requested the song
 }
 
-var guildItems = make(map[string]*QueueData)      // Maps guild ID to its queue data
-var guildSessions = make(map[string]*SessionData) // Maps guild ID to its audio session
+var (
+	guildItems    = make(map[string]*QueueData)   // Maps guild ID to its queue data
+	guildSessions = make(map[string]*SessionData) // Maps guild ID to its audio session
+)
 
 type QueueData struct {
 	Items       []*QueueItem // List of queued songs

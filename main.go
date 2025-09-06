@@ -58,6 +58,7 @@ func main() {
 	gracefulShutdown(s)
 }
 
+// gacefulShutdown handles cleaning up after the bot is shutdown
 func gracefulShutdown(s *discordgo.Session) {
 	log.Info("Starting graceful shutdown...")
 

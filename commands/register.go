@@ -70,9 +70,23 @@ func RegisterSlashCommands(s *discordgo.Session) {
 	commands.Add(
 		&discordgo.ApplicationCommand{
 			Name:        "playlist",
-			Description: "Show the users playlist.",
+			Description: "Manage your personal playlist",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "action",
+					Description: "Action to perform: add, remove, clear, play",
+					Required:    false,
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "value",
+					Description: "Song name, URL, or search query",
+					Required:    false,
+				},
+			},
 		},
-		nil,
+		playList,
 	)
 
 	commands.Add(
