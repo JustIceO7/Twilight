@@ -22,6 +22,7 @@ func HelpEmbedding(s *discordgo.Session, m *discordgo.MessageCreate) {
 					"`/pause` - Pause the current song.\n" +
 					"`/resume` - Resume the paused song.\n" +
 					"`/skip` - Skip the current song.\n" +
+					"`/shuffle` - Shuffle the current song queue.\n" +
 					"`/queue` - Show the current song queue.\n" +
 					"`/np` - Show the song that’s now playing.\n" +
 					"`/playlist view` - View your playlist.\n" +

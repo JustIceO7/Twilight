@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"os/exec"
 	"sync"
 	"time"
@@ -199,6 +200,22 @@ type GuildQueue struct {
 	CurrentItem *QueueItem    // Copy of currently playing song
 	Session     *AudioSession // Copy of the current audio session
 	mu          sync.Mutex    // Mutex to protect concurrent access
+}
+
+// ShuffleGuildQueue shuffles the song queue for a given guild
+func ShuffleGuildQueue(guildID string) bool {
+	qd, exists := guildItems[guildID]
+	if !exists {
+		return false
+	}
+
+	qd.mu.Lock()
+	defer qd.mu.Unlock()
+
+	rand.Shuffle(len(qd.Items), func(i, j int) {
+		qd.Items[i], qd.Items[j] = qd.Items[j], qd.Items[i]
+	})
+	return true
 }
 
 // Enqueue queues a song into the queue for a given guild

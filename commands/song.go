@@ -312,3 +312,25 @@ func currentQueue(ctx context.Context, s *discordgo.Session, i *discordgo.Intera
 	})
 	return nil
 }
+
+// shuffleQueue shuffles the current song queue
+func shuffleQueue(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate) *interactionError {
+	// Check if user is in a voice channel and bot is not in a different one
+	if !checkUserVoiceChannel(s, i) {
+		return nil
+	}
+	gq, ok := queue.GetGuildQueue(i.GuildID)
+	if !ok || gq.Session.VC == nil || len(gq.Items) == 0 {
+		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{Content: "🎶 The queue is empty 😶"},
+		})
+		return nil
+	}
+	queue.ShuffleGuildQueue(i.GuildID)
+	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{Content: "🔀 Queue shuffled!"},
+	})
+	return nil
+}
