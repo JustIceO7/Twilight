@@ -12,33 +12,14 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/kkdai/youtube/v2"
+	"github.com/spf13/viper"
 )
 
 // playSong plays the song given a link, adding the song to the song queue
 func playSong(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate) *interactionError {
-	// Get user's current voice channel
-	vs, err := s.State.VoiceState(i.GuildID, i.Member.User.ID)
-	if err != nil || vs == nil || vs.ChannelID == "" {
-		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{
-				Content: "Join a voice channel first 😉",
-			},
-		})
+	// Check if user is in a voice channel and bot is not in a different one
+	if !checkUserVoiceChannel(s, i) {
 		return nil
-	}
-
-	// Check if bot is already in a voice channel
-	if vc, ok := s.VoiceConnections[i.GuildID]; ok && vc != nil {
-		if vc.ChannelID != vs.ChannelID {
-			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{
-					Content: "I'm already in another voice channel 😅",
-				},
-			})
-			return nil
-		}
 	}
 
 	videoURL := i.ApplicationCommandData().Options[0].StringValue()
@@ -61,17 +42,6 @@ func playSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interactio
 		return nil
 	}
 
-	currentVideo, _ := yt.FetchVideoMetadata(videoID)
-	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{
-			Content: fmt.Sprintf("🎵 Adding **%s** to the queue...", currentVideo.Title),
-		},
-	})
-	if err != nil {
-		return &interactionError{err: err, message: "Failed to respond"}
-	}
-
 	vc, err := connectUserVoiceChannel(s, i.GuildID, i.Member.User.ID)
 	if err != nil {
 		return nil
@@ -82,11 +52,13 @@ func playSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interactio
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
 		stream, err := yt.FetchVideoStream(videoID)
 		if err != nil {
+			fmt.Printf("DEBUG: FetchVideoStream error: %v\n", err)
 			return nil
 		}
 
 		out, err := os.Create(filename)
 		if err != nil {
+			fmt.Printf("DEBUG: Create file error: %v\n", err)
 			stream.Close()
 			return nil
 		}
@@ -95,9 +67,21 @@ func playSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interactio
 		out.Close()
 		stream.Close()
 		if err != nil {
+			fmt.Printf("DEBUG: Copy error: %v\n", err)
 			os.Remove(filename)
 			return nil
 		}
+	}
+
+	currentVideo, _ := yt.FetchVideoMetadata(videoID)
+	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content: fmt.Sprintf("🎵 Adding **%s** to the queue...", currentVideo.Title),
+		},
+	})
+	if err != nil {
+		return &interactionError{err: err, message: "Failed to respond"}
 	}
 
 	gq := queue.Enqueue(i.GuildID, filename, i.Member.User.Username)
@@ -110,6 +94,11 @@ func playSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interactio
 
 // pauseSong pauses the current song
 func pauseSong(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate) *interactionError {
+	// Check if user is in a voice channel and bot is not in a different one
+	if !checkUserVoiceChannel(s, i) {
+		return nil
+	}
+
 	gq, ok := queue.GetGuildQueue(i.GuildID)
 	if !ok || gq.Session.VC == nil {
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -128,6 +117,11 @@ func pauseSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interacti
 
 // resumeSong resumes the current song
 func resumeSong(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate) *interactionError {
+	// Check if user is in a voice channel and bot is not in a different one
+	if !checkUserVoiceChannel(s, i) {
+		return nil
+	}
+
 	gq, ok := queue.GetGuildQueue(i.GuildID)
 	if !ok || gq.Session.VC == nil {
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -146,6 +140,11 @@ func resumeSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interact
 
 // stopSong stops the current session and disconnects the bot from the voice channel
 func stopSong(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate) *interactionError {
+	// Check if user is in a voice channel and bot is not in a different one
+	if !checkUserVoiceChannel(s, i) {
+		return nil
+	}
+
 	gq, ok := queue.GetGuildQueue(i.GuildID)
 	if !ok {
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -172,6 +171,11 @@ func stopSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interactio
 
 // skipSong skips the current song playing and moves on to the next
 func skipSong(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate) *interactionError {
+	// Check if user is in a voice channel and bot is not in a different one
+	if !checkUserVoiceChannel(s, i) {
+		return nil
+	}
+
 	gq, ok := queue.GetGuildQueue(i.GuildID)
 	if !ok || gq.Session.VC == nil {
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -193,6 +197,11 @@ func skipSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interactio
 
 // currentSong displays the current song being played
 func currentSong(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate) *interactionError {
+	// Check if user is in a voice channel and bot is not in a different one
+	if !checkUserVoiceChannel(s, i) {
+		return nil
+	}
+
 	gq, ok := queue.GetGuildQueue(i.GuildID)
 	if !ok || gq.Session.VC == nil || gq.CurrentItem == nil {
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -222,6 +231,7 @@ func currentSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interac
 		URL:         videoURL,
 		Description: fmt.Sprintf("Requested by: %s\nStatus: %s", currentItem.RequestedBy, status),
 		Thumbnail:   &discordgo.MessageEmbedThumbnail{URL: thumbnailURL},
+		Color:       viper.GetInt("theme"),
 	}
 
 	if len(gq.Items) > 0 {
@@ -257,6 +267,11 @@ func currentSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interac
 
 // currentQueue shows the list of songs in the queue using an embed
 func currentQueue(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate) *interactionError {
+	// Check if user is in a voice channel and bot is not in a different one
+	if !checkUserVoiceChannel(s, i) {
+		return nil
+	}
+
 	gq, ok := queue.GetGuildQueue(i.GuildID)
 	if !ok || gq.Session.VC == nil || gq.CurrentItem == nil {
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -268,6 +283,7 @@ func currentQueue(ctx context.Context, s *discordgo.Session, i *discordgo.Intera
 
 	embed := &discordgo.MessageEmbed{
 		Title: fmt.Sprintf("🎶 Queue for %s", i.GuildID),
+		Color: viper.GetInt("theme"),
 	}
 
 	queueText := ""

@@ -2,15 +2,35 @@ package handlers
 
 import (
 	"github.com/bwmarrin/discordgo"
+	"github.com/spf13/viper"
 )
 
-// HelpEmbedding creates the embedding for the help menu
+// HelpEmbedding creates the embedding for the music commands help menu
 func HelpEmbedding(s *discordgo.Session, m *discordgo.MessageCreate) {
 	botAvatarURL := s.State.User.AvatarURL("64")
 	helpEmbed := &discordgo.MessageEmbed{
-		Title: "Twilight Help",
+		Title:       "Twilight Help",
+		Description: "Use these slash commands to control music playback.",
 		Thumbnail: &discordgo.MessageEmbedThumbnail{
 			URL: botAvatarURL,
+		},
+		Color: viper.GetInt("theme"),
+		Fields: []*discordgo.MessageEmbedField{
+			{
+				Name: "__Music Commands__",
+				Value: "`/play <url>` - Play a song from a YouTube URL.\n" +
+					"`/pause` - Pause the current song.\n" +
+					"`/resume` - Resume the paused song.\n" +
+					"`/skip` - Skip the current song.\n" +
+					"`/queue` - Show the current song queue.\n" +
+					"`/np` - Show the song that’s now playing.\n" +
+					"`/playlist view` - View your playlist.\n" +
+					"`/playlist add <song>` - Add a song to your playlist (YouTube video ID).\n" +
+					"`/playlist remove <song>` - Remove a song from your playlist (YouTube video ID).\n" +
+					"`/playlist clear` - Clear your playlist.\n" +
+					"`/playlist play [song]` - Play a song from your playlist or the entire playlist (optional YouTube video ID).",
+				Inline: false,
+			},
 		},
 	}
 	s.ChannelMessageSendEmbed(m.ChannelID, helpEmbed)

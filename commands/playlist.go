@@ -10,22 +10,27 @@ import (
 )
 
 func playList(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate) *interactionError {
+	_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content: "Please wait...",
+		},
+	})
+
 	data := i.ApplicationCommandData()
 	options := data.Options
 
-	action := "view"
 	value := ""
 
-	if len(options) > 0 {
-		action = options[0].StringValue()
-	}
-	if len(options) > 1 {
-		value = options[1].StringValue()
+	subCmd := options[0].Name
+	if len(options[0].Options) > 0 {
+		value = options[0].Options[0].StringValue()
 	}
 
 	pm := playlist.NewManager(s, redis_client.RDB, db_client.DB, context.Background())
+	pm.EnsureUserExists(i)
 
-	switch action {
+	switch subCmd {
 	case "view":
 		pm.ShowPlaylist(i)
 	case "add":
@@ -35,7 +40,15 @@ func playList(ctx context.Context, s *discordgo.Session, i *discordgo.Interactio
 	case "clear":
 		pm.ClearPlaylist(i)
 	case "play":
-		pm.PlaySong(i, value)
+		// Check if user is in a voice channel and bot is not in a different one
+		if !checkUserVoiceChannel(s, i) {
+			return nil
+		}
+		vc, err := connectUserVoiceChannel(s, i.GuildID, i.Member.User.ID)
+		if err != nil {
+			return nil
+		}
+		pm.PlaySong(i, value, vc)
 	default:
 		pm.ShowPlaylist(i)
 	}

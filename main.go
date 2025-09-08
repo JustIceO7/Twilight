@@ -3,6 +3,7 @@ package main
 import (
 	"Twilight/commands"
 	"Twilight/config"
+	"Twilight/db_client"
 	"Twilight/handlers"
 	"Twilight/queue"
 	"flag"
@@ -51,6 +52,8 @@ func main() {
 	// Connecting to Discord Server Gateway
 	s.Open()
 	log.Info("Bot is initialising")
+
+	db_client.Init()
 
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM)

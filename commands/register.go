@@ -73,16 +73,53 @@ func RegisterSlashCommands(s *discordgo.Session) {
 			Description: "Manage your personal playlist",
 			Options: []*discordgo.ApplicationCommandOption{
 				{
-					Type:        discordgo.ApplicationCommandOptionString,
-					Name:        "action",
-					Description: "Action to perform: add, remove, clear, play",
-					Required:    false,
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "view",
+					Description: "View your current playlist",
 				},
 				{
-					Type:        discordgo.ApplicationCommandOptionString,
-					Name:        "value",
-					Description: "Song name, URL, or search query",
-					Required:    false,
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "add",
+					Description: "Add a song to your playlist",
+					Options: []*discordgo.ApplicationCommandOption{
+						{
+							Type:        discordgo.ApplicationCommandOptionString,
+							Name:        "song",
+							Description: "YouTube video ID",
+							Required:    true,
+						},
+					},
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "remove",
+					Description: "Remove a song from your playlist",
+					Options: []*discordgo.ApplicationCommandOption{
+						{
+							Type:        discordgo.ApplicationCommandOptionString,
+							Name:        "song",
+							Description: "YouTube video ID",
+							Required:    true,
+						},
+					},
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "clear",
+					Description: "Clear your entire playlist",
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "play",
+					Description: "Start a song within your playlist or play the entire playlist",
+					Options: []*discordgo.ApplicationCommandOption{
+						{
+							Type:        discordgo.ApplicationCommandOptionString,
+							Name:        "song",
+							Description: "YouTube video ID",
+							Required:    false,
+						},
+					},
 				},
 			},
 		},

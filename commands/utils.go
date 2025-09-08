@@ -1,8 +1,6 @@
 package commands
 
 import (
-	"fmt"
-
 	"github.com/bwmarrin/discordgo"
 )
 
@@ -10,7 +8,14 @@ import (
 func connectUserVoiceChannel(s *discordgo.Session, guildID, userID string) (*discordgo.VoiceConnection, error) {
 	vcState, err := s.State.VoiceState(guildID, userID)
 	if err != nil || vcState == nil {
-		return nil, fmt.Errorf("user not in a voice channel")
+		return nil, err
+	}
+
+	if vc, ok := s.VoiceConnections[guildID]; ok && vc != nil {
+		if vc.ChannelID == vcState.ChannelID {
+			return vc, nil
+		}
+		return nil, err
 	}
 
 	vc, err := s.ChannelVoiceJoin(guildID, vcState.ChannelID, false, false)
@@ -19,4 +24,31 @@ func connectUserVoiceChannel(s *discordgo.Session, guildID, userID string) (*dis
 	}
 
 	return vc, nil
+}
+
+func checkUserVoiceChannel(s *discordgo.Session, i *discordgo.InteractionCreate) bool {
+	// Get user's current voice channel
+	vs, err := s.State.VoiceState(i.GuildID, i.Member.User.ID)
+	if err != nil || vs == nil || vs.ChannelID == "" {
+		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "Join a voice channel first 😉",
+			},
+		})
+		return false
+	}
+
+	// Check if bot is already in a different voice channel
+	if vc, ok := s.VoiceConnections[i.GuildID]; ok && vc != nil && vc.ChannelID != vs.ChannelID {
+		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "I'm already in another voice channel 😅",
+			},
+		})
+		return false
+	}
+
+	return true
 }

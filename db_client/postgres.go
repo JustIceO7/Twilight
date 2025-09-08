@@ -1,27 +1,45 @@
 package db_client
 
 import (
-	"context"
+	"fmt"
+	"os"
+	"time"
 
-	"github.com/Strum355/log"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 var (
-	DB  *pgxpool.Pool
-	Ctx = context.Background()
+	DB *gorm.DB
 )
 
-func init() {
-	var err error
+func Init() {
 	dsn := "postgres://postgres:postgres@postgres:5432/postgres"
 
-	DB, err = pgxpool.New(Ctx, dsn)
+	var err error
+	for range 10 {
+		DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+		if err == nil {
+			sqlDB, _ := DB.DB()
+			if pingErr := sqlDB.Ping(); pingErr == nil {
+				break
+			}
+		}
+		fmt.Println("Waiting for Postgres to be ready...")
+		time.Sleep(time.Second)
+	}
 	if err != nil {
-		log.WithError(err).Error("Unable to connect to database")
+		fmt.Println("Unable to connect to database:", err)
+		return
 	}
 
-	if err := DB.Ping(Ctx); err != nil {
-		log.WithError(err).Error("Cannot ping database")
+	schema, err := os.ReadFile("db_client/schema.sql")
+	if err != nil {
+		fmt.Println("Unable to read schema.sql:", err)
+		return
+	}
+
+	if err := DB.Exec(string(schema)).Error; err != nil {
+		fmt.Println("Unable to execute schema.sql:", err)
 	}
 }
