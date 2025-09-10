@@ -53,6 +53,7 @@ func playSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interactio
 		stream, err := yt.FetchVideoStream(videoID)
 		if err != nil {
 			fmt.Printf("DEBUG: FetchVideoStream error: %v\n", err)
+			sendErrorResponse(s, i)
 			return nil
 		}
 
@@ -60,6 +61,7 @@ func playSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interactio
 		if err != nil {
 			fmt.Printf("DEBUG: Create file error: %v\n", err)
 			stream.Close()
+			sendErrorResponse(s, i)
 			return nil
 		}
 
@@ -69,6 +71,7 @@ func playSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interactio
 		if err != nil {
 			fmt.Printf("DEBUG: Copy error: %v\n", err)
 			os.Remove(filename)
+			sendErrorResponse(s, i)
 			return nil
 		}
 	}
@@ -77,7 +80,7 @@ func playSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interactio
 	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
-			Content: fmt.Sprintf("🎵 Adding **%s** to the queue...", currentVideo.Title),
+			Content: fmt.Sprintf("🎵 **%s** added to the queue (`%s`)", currentVideo.Title, currentVideo.Duration),
 		},
 	})
 	if err != nil {

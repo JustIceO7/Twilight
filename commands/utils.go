@@ -26,6 +26,7 @@ func connectUserVoiceChannel(s *discordgo.Session, guildID, userID string) (*dis
 	return vc, nil
 }
 
+// checkUserVoiceChannel checks whether user is in the same voice channel as bot
 func checkUserVoiceChannel(s *discordgo.Session, i *discordgo.InteractionCreate) bool {
 	// Get user's current voice channel
 	vs, err := s.State.VoiceState(i.GuildID, i.Member.User.ID)
@@ -51,4 +52,12 @@ func checkUserVoiceChannel(s *discordgo.Session, i *discordgo.InteractionCreate)
 	}
 
 	return true
+}
+
+// sendErrorResponse sends a generic error message to Discord
+func sendErrorResponse(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{Content: "❌ An error occurred while processing your request."},
+	})
 }
