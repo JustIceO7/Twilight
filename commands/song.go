@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"Twilight/queue"
+	"Twilight/utils"
 	"Twilight/yt"
 
 	"github.com/bwmarrin/discordgo"
@@ -80,7 +81,7 @@ func playSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interactio
 	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
-			Content: fmt.Sprintf("🎵 **%s** added to the queue (`%s`)", currentVideo.Title, currentVideo.Duration),
+			Content: fmt.Sprintf("🎵 **%s** added to the queue (`%s`)", currentVideo.Title, utils.FormatYtDuration(currentVideo.Duration)),
 		},
 	})
 	if err != nil {
@@ -167,7 +168,7 @@ func stopSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interactio
 	queue.DeleteGuildQueue(i.GuildID)
 	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{Content: "⏹️ Stopped"},
+		Data: &discordgo.InteractionResponseData{Content: "⏹️ Playback stopped and disconnected"},
 	})
 	return nil
 }

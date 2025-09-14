@@ -9,6 +9,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
+// playList handles all the handlers of playlist commands
 func playList(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate) *interactionError {
 	_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,

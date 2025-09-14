@@ -24,8 +24,14 @@ func HelpEmbedding(s *discordgo.Session, m *discordgo.MessageCreate) {
 					"`/skip` - Skip the current song.\n" +
 					"`/shuffle` - Shuffle the current song queue.\n" +
 					"`/queue` - Show the current song queue.\n" +
-					"`/np` - Show the song that’s now playing.\n" +
-					"`/playlist view` - View your playlist.\n" +
+					"`/np` - Show the song that's now playing.\n" +
+					"`/disconnect` - Stop playback and disconnect the bot from the voice channel.\n" +
+					"`/leave` - Stop playback and disconnect the bot from the voice channel.",
+				Inline: false,
+			},
+			{
+				Name: "__Playlist Commands__",
+				Value: "`/playlist view` - View your playlist.\n" +
 					"`/playlist add <song>` - Add a song to your playlist (YouTube video ID).\n" +
 					"`/playlist remove <song>` - Remove a song from your playlist (YouTube video ID).\n" +
 					"`/playlist clear` - Clear your playlist.\n" +
