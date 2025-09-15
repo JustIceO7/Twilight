@@ -33,16 +33,6 @@ func playSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interactio
 		return nil
 	}
 
-	client := youtube.Client{}
-	_, err = client.GetVideo(videoID)
-	if err != nil {
-		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{Content: "❌ Could not fetch the video. It may be private or removed."},
-		})
-		return nil
-	}
-
 	vc, err := connectUserVoiceChannel(s, i.GuildID, i.Member.User.ID)
 	if err != nil {
 		return nil
@@ -54,7 +44,10 @@ func playSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interactio
 		stream, err := yt.FetchVideoStream(videoID)
 		if err != nil {
 			fmt.Printf("DEBUG: FetchVideoStream error: %v\n", err)
-			sendErrorResponse(s, i)
+			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{Content: "❌ Could not fetch the video. It may be private or removed."},
+			})
 			return nil
 		}
 
