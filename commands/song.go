@@ -70,7 +70,6 @@ func playSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interactio
 		return nil
 	}
 
-	os.MkdirAll("cache", 0755)
 	filename := fmt.Sprintf("cache/%s.mp3", videoID)
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
 		stream, err := yt.FetchVideoStream(videoID)

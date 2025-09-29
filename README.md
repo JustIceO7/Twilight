@@ -4,7 +4,7 @@ Discord Bot written in Golang (v1.25.0+) to play songs from YouTube URLs, includ
 ## Architecture
 - **PostgreSQL**: Persistent storage for user playlists.
 - **Redis**: In-memory caching for song data.
-- **Docker**: Containerized deployment with docker-compose for easy setup and management. All core dependencies (FFmpeg, yt-dlp, PostgreSQL, Redis) are pre-configured within the Docker containers.
+- **Docker**: Containerized deployment with docker-compose for easy setup and management. All core dependencies (FFmpeg, PostgreSQL, Redis) are pre-configured within the Docker containers.
 
 ## Docker Ports
 - **8080**: Bot application.
@@ -48,7 +48,7 @@ docker-compose up
 `/shuffle` - Shuffle the current song queue.  
 `/queue` - Show the current song queue.  
 `/np` - Show the song that's now playing.  
-`/sinfo` - Show the song info from a YouTube URL.
+`/sinfo` - Show the song info from a YouTube URL.  
 `/disconnect` - Stop playback and disconnect the bot from the voice channel.  
 `/leave` - Stop playback and disconnect the bot from the voice channel.
 

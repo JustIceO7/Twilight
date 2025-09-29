@@ -340,8 +340,6 @@ func (pm *PlaylistManager) processPlaylistSongs(videoIDs []string, i *discordgo.
 	for _, videoID := range videoIDs {
 		filename := fmt.Sprintf("cache/%s.mp3", videoID)
 
-		os.MkdirAll("cache", 0755)
-
 		if _, err := os.Stat(filename); os.IsNotExist(err) {
 			stream, err := yt.FetchVideoStream(videoID)
 			if err != nil {
