@@ -7,7 +7,6 @@ import (
 
 // MessageHandler handles message commands
 func MessageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
-	// log.Info("Received message: " + m.Content + " from: " + m.Author.Username)
 	// If message is sent from the bot
 	if m.Author.ID == s.State.User.ID {
 		return

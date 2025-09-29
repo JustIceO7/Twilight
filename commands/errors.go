@@ -10,6 +10,7 @@ type interactionError struct {
 	message string
 }
 
+// Handle handles responding to error messages within Discord
 func (e *interactionError) Handle(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	log.WithError(e.err).Error(e.message)
 	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
