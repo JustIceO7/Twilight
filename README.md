@@ -48,6 +48,7 @@ docker-compose up
 `/shuffle` - Shuffle the current song queue.  
 `/queue` - Show the current song queue.  
 `/np` - Show the song that's now playing.  
+`/sinfo` - Show the song info from a YouTube URL.
 `/disconnect` - Stop playback and disconnect the bot from the voice channel.  
 `/leave` - Stop playback and disconnect the bot from the voice channel.
 

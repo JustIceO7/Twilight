@@ -45,6 +45,22 @@ func RegisterSlashCommands(s *discordgo.Session) {
 
 	commands.Add(
 		&discordgo.ApplicationCommand{
+			Name:        "sinfo",
+			Description: "Shows info of song.",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "url",
+					Description: "Youtube link for the song",
+					Required:    true,
+				},
+			},
+		},
+		songInfo,
+	)
+
+	commands.Add(
+		&discordgo.ApplicationCommand{
 			Name:        "skip",
 			Description: "Skip the current song.",
 		},

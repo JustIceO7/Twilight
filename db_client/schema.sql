@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS songs (
     title TEXT,
     author TEXT,
     views INT,
+    description TEXT,
     duration INT,
     publish_date TIMESTAMP,
     url TEXT

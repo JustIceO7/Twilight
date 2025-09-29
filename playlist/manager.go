@@ -34,6 +34,7 @@ type Song struct {
 	Title       string
 	Author      string
 	Views       int
+	Description string
 	Duration    int64 // Seconds
 	PublishDate time.Time
 	URL         string
@@ -174,6 +175,7 @@ func (pm *PlaylistManager) AddSong(i *discordgo.InteractionCreate, url string) {
 		Title:       data.Title,
 		Author:      data.Author,
 		Views:       data.Views,
+		Description: data.Description,
 		Duration:    int64(data.Duration.Seconds()),
 		PublishDate: data.PublishDate,
 		URL:         url,

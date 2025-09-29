@@ -16,13 +16,45 @@ import (
 	"github.com/spf13/viper"
 )
 
+// songInfo returns the metadata of a given song
+func songInfo(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate) *interactionError {
+	videoURL := i.ApplicationCommandData().Options[0].StringValue()
+	videoID, err := youtube.ExtractVideoID(videoURL)
+	if err != nil {
+		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{Content: "❌ Invalid YouTube link!"},
+		})
+		return nil
+	}
+	videoMetadata, err := yt.FetchVideoMetadata(videoID)
+	if err != nil {
+		sendFetchErrorResponse(s, i)
+		return nil
+	}
+	embed := &discordgo.MessageEmbed{
+		Title:       videoMetadata.Title,
+		URL:         videoURL,
+		Description: videoMetadata.Description,
+		Thumbnail:   &discordgo.MessageEmbedThumbnail{URL: videoMetadata.Thumbnails[0].URL},
+		Color:       viper.GetInt("theme"),
+	}
+
+	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{embed},
+		},
+	})
+	return nil
+}
+
 // playSong plays the song given a link, adding the song to the song queue
 func playSong(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate) *interactionError {
 	// Check if user is in a voice channel and bot is not in a different one
 	if !checkUserVoiceChannel(s, i) {
 		return nil
 	}
-
 	videoURL := i.ApplicationCommandData().Options[0].StringValue()
 	videoID, err := youtube.ExtractVideoID(videoURL)
 	if err != nil {
@@ -70,7 +102,11 @@ func playSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interactio
 		}
 	}
 
-	currentVideo, _ := yt.FetchVideoMetadata(videoID)
+	currentVideo, err := yt.FetchVideoMetadata(videoID)
+	if err != nil {
+		sendFetchErrorResponse(s, i)
+		return nil
+	}
 	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
@@ -215,7 +251,11 @@ func currentSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interac
 	}
 
 	currentID := strings.TrimSuffix(strings.TrimPrefix(currentItem.Filename, "cache/"), ".mp3")
-	currentVideo, _ := yt.FetchVideoMetadata(currentID)
+	currentVideo, err := yt.FetchVideoMetadata(currentID)
+	if err != nil {
+		sendFetchErrorResponse(s, i)
+		return nil
+	}
 
 	thumbnailURL := ""
 	if len(currentVideo.Thumbnails) > 0 {
@@ -239,7 +279,11 @@ func currentSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interac
 		}
 		for idx, item := range gq.Items[:queueLimit] {
 			itemID := strings.TrimSuffix(strings.TrimPrefix(item.Filename, "cache/"), ".mp3")
-			video, _ := yt.FetchVideoMetadata(itemID)
+			video, err := yt.FetchVideoMetadata(itemID)
+			if err != nil {
+				sendFetchErrorResponse(s, i)
+				return nil
+			}
 			queueText += fmt.Sprintf("%d. `%s` (requested by %s)\n", idx+1, video.Title, item.RequestedBy)
 		}
 		if len(gq.Items) > 5 {
@@ -285,12 +329,20 @@ func currentQueue(ctx context.Context, s *discordgo.Session, i *discordgo.Intera
 
 	queueText := ""
 	currentID := strings.TrimSuffix(strings.TrimPrefix(gq.CurrentItem.Filename, "cache/"), ".mp3")
-	currentVideo, _ := yt.FetchVideoMetadata(currentID)
+	currentVideo, err := yt.FetchVideoMetadata(currentID)
+	if err != nil {
+		sendFetchErrorResponse(s, i)
+		return nil
+	}
 	queueText += fmt.Sprintf("1. `%s` (requested by %s) ▶️\n", currentVideo.Title, gq.CurrentItem.RequestedBy)
 
 	for idx, item := range gq.Items {
 		itemID := strings.TrimSuffix(strings.TrimPrefix(item.Filename, "cache/"), ".mp3")
-		video, _ := yt.FetchVideoMetadata(itemID)
+		video, err := yt.FetchVideoMetadata(itemID)
+		if err != nil {
+			sendFetchErrorResponse(s, i)
+			return nil
+		}
 		queueText += fmt.Sprintf("%d. `%s` (requested by %s)\n", idx+2, video.Title, item.RequestedBy)
 	}
 

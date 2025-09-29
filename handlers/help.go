@@ -25,6 +25,7 @@ func HelpEmbedding(s *discordgo.Session, m *discordgo.MessageCreate) {
 					"`/shuffle` - Shuffle the current song queue.\n" +
 					"`/queue` - Show the current song queue.\n" +
 					"`/np` - Show the song that's now playing.\n" +
+					"`/sinfo` - Show the song info from a YouTube URL.\n" +
 					"`/disconnect` - Stop playback and disconnect the bot from the voice channel.\n" +
 					"`/leave` - Stop playback and disconnect the bot from the voice channel.",
 				Inline: false,
