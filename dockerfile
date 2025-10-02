@@ -4,12 +4,12 @@ WORKDIR /app
 
 COPY go.mod go.sum ./
 
-RUN apk add --no-cache ffmpeg git ca-certificates opus-dev build-base
-RUN go mod download
+RUN apk add --no-cache ffmpeg ca-certificates opus-dev build-base \
+    && go mod download
 
 COPY . .
 
-RUN mkdir -p /app/cache && chmod 755 /app/cache
-RUN go build -o twilight .
+RUN mkdir -p /app/cache && chmod 755 /app/cache \
+    && go build -o twilight .
 
 CMD ["./twilight"]

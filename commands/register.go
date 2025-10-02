@@ -45,6 +45,14 @@ func RegisterSlashCommands(s *discordgo.Session) {
 
 	commands.Add(
 		&discordgo.ApplicationCommand{
+			Name:        "loop",
+			Description: "Toggles loop for the current queue.",
+		},
+		loopQueue,
+	)
+
+	commands.Add(
+		&discordgo.ApplicationCommand{
 			Name:        "sinfo",
 			Description: "Shows info of song.",
 			Options: []*discordgo.ApplicationCommandOption{

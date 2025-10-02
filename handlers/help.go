@@ -26,6 +26,7 @@ func HelpEmbedding(s *discordgo.Session, m *discordgo.MessageCreate) {
 					"`/queue` - Show the current song queue.\n" +
 					"`/np` - Show the song that's now playing.\n" +
 					"`/sinfo` - Show the song info from a YouTube URL.\n" +
+					"`/loop` - Toggle loop for the current song queue.\n" +
 					"`/disconnect` - Stop playback and disconnect the bot from the voice channel.\n" +
 					"`/leave` - Stop playback and disconnect the bot from the voice channel.",
 				Inline: false,

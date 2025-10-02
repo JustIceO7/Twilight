@@ -174,19 +174,20 @@ func playAudioFile(vc *discordgo.VoiceConnection, filename string, session *Audi
 	return cmd.Wait()
 }
 
-type QueueItem struct {
+type QueueSong struct {
 	Filename    string // Path to the audio file
 	RequestedBy string // Username of who requested the song
 }
 
 var (
-	guildItems    = make(map[string]*QueueData)   // Maps guild ID to its queue data
+	guildSongs    = make(map[string]*QueueData)   // Maps guild ID to its queue data
 	guildSessions = make(map[string]*SessionData) // Maps guild ID to its audio session
 )
 
 type QueueData struct {
-	Items       []*QueueItem // List of queued songs
-	CurrentItem *QueueItem   // Currently playing song
+	Songs       []*QueueSong // List of queued songs
+	CurrentSong *QueueSong   // Currently playing song
+	Loop        bool         // Queue Loop
 	mu          sync.Mutex   // Mutex to protect concurrent access
 }
 
@@ -196,34 +197,47 @@ type SessionData struct {
 }
 
 type GuildQueue struct {
-	Items       []*QueueItem  // Copy of queued songs
-	CurrentItem *QueueItem    // Copy of currently playing song
+	Songs       []*QueueSong  // Copy of queued songs
+	CurrentSong *QueueSong    // Copy of currently playing song
+	Loop        bool          // Queue Loop
 	Session     *AudioSession // Copy of the current audio session
 	mu          sync.Mutex    // Mutex to protect concurrent access
 }
 
 // ShuffleGuildQueue shuffles the song queue for a given guild
-func ShuffleGuildQueue(guildID string) bool {
-	qd, exists := guildItems[guildID]
+func ShuffleGuildQueue(guildID string) error {
+	qd, exists := guildSongs[guildID]
 	if !exists {
-		return false
+		return fmt.Errorf("no queue for guild %s", guildID)
 	}
 
 	qd.mu.Lock()
 	defer qd.mu.Unlock()
 
-	rand.Shuffle(len(qd.Items), func(i, j int) {
-		qd.Items[i], qd.Items[j] = qd.Items[j], qd.Items[i]
+	rand.Shuffle(len(qd.Songs), func(i, j int) {
+		qd.Songs[i], qd.Songs[j] = qd.Songs[j], qd.Songs[i]
 	})
-	return true
+	return nil
+}
+
+func LoopGuildQueue(guildID string) (bool, error) {
+	qd, exists := guildSongs[guildID]
+	if !exists {
+		return false, fmt.Errorf("no queue for guild %s", guildID)
+	}
+
+	qd.mu.Lock()
+	defer qd.mu.Unlock()
+	qd.Loop = !qd.Loop
+	return qd.Loop, nil
 }
 
 // Enqueue queues a song into the queue for a given guild
 func Enqueue(guildID, filename, username string) *GuildQueue {
-	qd, exists := guildItems[guildID]
+	qd, exists := guildSongs[guildID]
 	if !exists {
-		qd = &QueueData{Items: []*QueueItem{}}
-		guildItems[guildID] = qd
+		qd = &QueueData{Songs: []*QueueSong{}}
+		guildSongs[guildID] = qd
 	}
 
 	// Ensure SessionData exists
@@ -242,21 +256,21 @@ func Enqueue(guildID, filename, username string) *GuildQueue {
 	}
 	sd.mu.Unlock()
 
-	qd.Items = append(qd.Items, &QueueItem{
+	qd.Songs = append(qd.Songs, &QueueSong{
 		Filename:    filename,
 		RequestedBy: username,
 	})
 
 	return &GuildQueue{
-		Items:       qd.Items,
-		CurrentItem: qd.CurrentItem,
+		Songs:       qd.Songs,
+		CurrentSong: qd.CurrentSong,
 		Session:     sd.Session,
 	}
 }
 
 // playNext plays the next song in the guilds song queue
 func PlayNext(s *discordgo.Session, guildID string, vc *discordgo.VoiceConnection) {
-	qd, exists := guildItems[guildID]
+	qd, exists := guildSongs[guildID]
 	if !exists {
 		return
 	}
@@ -267,15 +281,15 @@ func PlayNext(s *discordgo.Session, guildID string, vc *discordgo.VoiceConnectio
 
 	for {
 		qd.mu.Lock()
-		if len(qd.Items) == 0 {
-			qd.CurrentItem = nil // Clear current item when queue is empty
+		if len(qd.Songs) == 0 {
+			qd.CurrentSong = nil // Clear current item when queue is empty
 			qd.mu.Unlock()
 			break
 		}
 
-		item := qd.Items[0]
-		qd.Items = qd.Items[1:]
-		qd.CurrentItem = item
+		item := qd.Songs[0]
+		qd.Songs = qd.Songs[1:]
+		qd.CurrentSong = item
 		qd.mu.Unlock()
 
 		sd.mu.Lock()
@@ -287,19 +301,23 @@ func PlayNext(s *discordgo.Session, guildID string, vc *discordgo.VoiceConnectio
 		sd.mu.Unlock()
 
 		err := playAudioFile(vc, item.Filename, session)
-		if err != nil && err.Error() != "EOF" {
+		if err != nil && err.Error() != "EOF" && err.Error() != "unexpected EOF" {
 			fmt.Printf("Playback error: %v\n", err)
 		}
 
 		qd.mu.Lock()
-		qd.CurrentItem = nil
+		if qd.Loop {
+			qd.Songs = append(qd.Songs, item)
+		} else {
+			qd.CurrentSong = nil
+		}
 		qd.mu.Unlock()
 	}
 }
 
 // GetGuildQueue returns the full queue for a given guild
 func GetGuildQueue(guildID string) (*GuildQueue, bool) {
-	qd, qExists := guildItems[guildID]
+	qd, qExists := guildSongs[guildID]
 	sd, sExists := guildSessions[guildID]
 	if !qExists || !sExists {
 		return nil, false
@@ -310,22 +328,23 @@ func GetGuildQueue(guildID string) (*GuildQueue, bool) {
 	sd.mu.Lock()
 	defer sd.mu.Unlock()
 
-	itemsCopy := make([]*QueueItem, len(qd.Items))
-	copy(itemsCopy, qd.Items)
+	songsCopy := make([]*QueueSong, len(qd.Songs))
+	copy(songsCopy, qd.Songs)
 
-	var currentCopy *QueueItem
-	if qd.CurrentItem != nil {
-		currentCopy = qd.CurrentItem
+	var currentCopy *QueueSong
+	if qd.CurrentSong != nil {
+		currentCopy = qd.CurrentSong
 	}
 
 	return &GuildQueue{
-		Items:       itemsCopy,
-		CurrentItem: currentCopy,
+		Songs:       songsCopy,
+		CurrentSong: currentCopy,
+		Loop:        qd.Loop,
 		Session:     sd.Session,
 	}, true
 }
 
-// DeleteGuildQueue removes the guild from guildItems and guildSessions
+// DeleteGuildQueue removes the guild from guildSongs and guildSessions
 func DeleteGuildQueue(guildID string) {
 	if sd, exists := guildSessions[guildID]; exists {
 		sd.mu.Lock()
@@ -335,18 +354,18 @@ func DeleteGuildQueue(guildID string) {
 		sd.mu.Unlock()
 		delete(guildSessions, guildID)
 	}
-	delete(guildItems, guildID)
+	delete(guildSongs, guildID)
 }
 
-// ClearCurrentItem clears the currently playing item for a guild
-func ClearCurrentItem(guildID string) {
-	qd, exists := guildItems[guildID]
+// ClearCurrentSong clears the currently playing item for a guild
+func ClearCurrentSong(guildID string) {
+	qd, exists := guildSongs[guildID]
 	if !exists {
 		return
 	}
 
 	qd.mu.Lock()
-	qd.CurrentItem = nil
+	qd.CurrentSong = nil
 	qd.mu.Unlock()
 }
 
@@ -364,8 +383,8 @@ func StopAllSessions() {
 	}
 
 	// Clear all queue data
-	for guildID := range guildItems {
-		delete(guildItems, guildID)
+	for guildID := range guildSongs {
+		delete(guildSongs, guildID)
 	}
 
 	// Clear all session data

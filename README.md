@@ -1,5 +1,5 @@
 # Twilight (Music Discord Bot)
-Discord Bot written in Golang (v1.25.0+) to play songs from YouTube URLs, including playlist features.
+A Discord bot written in Golang (v1.25.0+) that streams audio concurrently, manages song queues, and supports YouTube playback, playlists, and multiple guilds.
 
 ## Architecture
 - **PostgreSQL**: Persistent storage for user playlists.
@@ -49,6 +49,7 @@ docker-compose up
 `/queue` - Show the current song queue.  
 `/np` - Show the song that's now playing.  
 `/sinfo` - Show the song info from a YouTube URL.  
+`/loop` - Toggle loop for the current song queue.  
 `/disconnect` - Stop playback and disconnect the bot from the voice channel.  
 `/leave` - Stop playback and disconnect the bot from the voice channel.
 

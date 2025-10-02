@@ -191,7 +191,7 @@ func stopSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interactio
 		gq.Session.VC.Disconnect()
 	}
 
-	queue.ClearCurrentItem(i.GuildID)
+	queue.ClearCurrentSong(i.GuildID)
 
 	queue.DeleteGuildQueue(i.GuildID)
 	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -227,7 +227,7 @@ func skipSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interactio
 	return nil
 }
 
-// currentSong displays the current song being played
+// currentSong displays the current song being played as well as the rest of the queue
 func currentSong(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate) *interactionError {
 	// Check if user is in a voice channel and bot is not in a different one
 	if !checkUserVoiceChannel(s, i) {
@@ -235,7 +235,7 @@ func currentSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interac
 	}
 
 	gq, ok := queue.GetGuildQueue(i.GuildID)
-	if !ok || gq.Session.VC == nil || gq.CurrentItem == nil {
+	if !ok || gq.Session.VC == nil || gq.CurrentSong == nil {
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{Content: "🎶 Nothing is playing right now 😶"},
@@ -243,13 +243,13 @@ func currentSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interac
 		return nil
 	}
 
-	currentItem := gq.CurrentItem
+	currentSong := gq.CurrentSong
 	status := "▶️ Playing"
 	if gq.Session.IsPaused {
 		status = "⏸️ Paused"
 	}
 
-	currentID := strings.TrimSuffix(strings.TrimPrefix(currentItem.Filename, "cache/"), ".mp3")
+	currentID := strings.TrimSuffix(strings.TrimPrefix(currentSong.Filename, "cache/"), ".mp3")
 	currentVideo, err := yt.FetchVideoMetadata(currentID)
 	if err != nil {
 		sendFetchErrorResponse(s, i)
@@ -265,18 +265,18 @@ func currentSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interac
 	embed := &discordgo.MessageEmbed{
 		Title:       fmt.Sprintf("🎵 Now Playing: %s", currentVideo.Title),
 		URL:         videoURL,
-		Description: fmt.Sprintf("Requested by: %s\nStatus: %s", currentItem.RequestedBy, status),
+		Description: fmt.Sprintf("Requested by: %s\nStatus: %s", currentSong.RequestedBy, status),
 		Thumbnail:   &discordgo.MessageEmbedThumbnail{URL: thumbnailURL},
 		Color:       viper.GetInt("theme"),
 	}
 
-	if len(gq.Items) > 0 {
+	if len(gq.Songs) > 0 {
 		queueText := "**Up Next:**\n"
-		queueLimit := len(gq.Items)
+		queueLimit := len(gq.Songs)
 		if queueLimit > 5 {
 			queueLimit = 5
 		}
-		for idx, item := range gq.Items[:queueLimit] {
+		for idx, item := range gq.Songs[:queueLimit] {
 			itemID := strings.TrimSuffix(strings.TrimPrefix(item.Filename, "cache/"), ".mp3")
 			video, err := yt.FetchVideoMetadata(itemID)
 			if err != nil {
@@ -285,12 +285,16 @@ func currentSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interac
 			}
 			queueText += fmt.Sprintf("%d. `%s` (requested by %s)\n", idx+1, video.Title, item.RequestedBy)
 		}
-		if len(gq.Items) > 5 {
-			queueText += fmt.Sprintf("...and %d more", len(gq.Items)-5)
+		if len(gq.Songs) > 5 {
+			queueText += fmt.Sprintf("...and %d more", len(gq.Songs)-5)
+		}
+		looped := "🔁"
+		if !gq.Loop {
+			looped = ""
 		}
 		embed.Fields = []*discordgo.MessageEmbedField{
 			{
-				Name:  "Queue",
+				Name:  fmt.Sprintf("Queue %s", looped),
 				Value: queueText,
 			},
 		}
@@ -313,7 +317,7 @@ func currentQueue(ctx context.Context, s *discordgo.Session, i *discordgo.Intera
 	}
 
 	gq, ok := queue.GetGuildQueue(i.GuildID)
-	if !ok || gq.Session.VC == nil || gq.CurrentItem == nil {
+	if !ok || gq.Session.VC == nil || gq.CurrentSong == nil {
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{Content: "🎶 The queue is empty 😶"},
@@ -321,21 +325,22 @@ func currentQueue(ctx context.Context, s *discordgo.Session, i *discordgo.Intera
 		return nil
 	}
 
+	guild, _ := s.Guild(i.GuildID)
 	embed := &discordgo.MessageEmbed{
-		Title: fmt.Sprintf("🎶 Queue for %s", i.GuildID),
+		Title: fmt.Sprintf("🎶 Queue for `%s`", guild.Name),
 		Color: viper.GetInt("theme"),
 	}
 
 	queueText := ""
-	currentID := strings.TrimSuffix(strings.TrimPrefix(gq.CurrentItem.Filename, "cache/"), ".mp3")
+	currentID := strings.TrimSuffix(strings.TrimPrefix(gq.CurrentSong.Filename, "cache/"), ".mp3")
 	currentVideo, err := yt.FetchVideoMetadata(currentID)
 	if err != nil {
 		sendFetchErrorResponse(s, i)
 		return nil
 	}
-	queueText += fmt.Sprintf("1. `%s` (requested by %s) ▶️\n", currentVideo.Title, gq.CurrentItem.RequestedBy)
+	queueText += fmt.Sprintf("1. `%s` (requested by %s) ▶️\n", currentVideo.Title, gq.CurrentSong.RequestedBy)
 
-	for idx, item := range gq.Items {
+	for idx, item := range gq.Songs {
 		itemID := strings.TrimSuffix(strings.TrimPrefix(item.Filename, "cache/"), ".mp3")
 		video, err := yt.FetchVideoMetadata(itemID)
 		if err != nil {
@@ -344,10 +349,13 @@ func currentQueue(ctx context.Context, s *discordgo.Session, i *discordgo.Intera
 		}
 		queueText += fmt.Sprintf("%d. `%s` (requested by %s)\n", idx+2, video.Title, item.RequestedBy)
 	}
-
+	looped := "🔁"
+	if !gq.Loop {
+		looped = ""
+	}
 	embed.Fields = []*discordgo.MessageEmbedField{
 		{
-			Name:  "Queue",
+			Name:  fmt.Sprintf("Queue %s", looped),
 			Value: queueText,
 		},
 	}
@@ -368,17 +376,54 @@ func shuffleQueue(ctx context.Context, s *discordgo.Session, i *discordgo.Intera
 		return nil
 	}
 	gq, ok := queue.GetGuildQueue(i.GuildID)
-	if !ok || gq.Session.VC == nil || len(gq.Items) == 0 {
+	if !ok || gq.Session.VC == nil || len(gq.Songs) == 0 {
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{Content: "🎶 The queue is empty 😶"},
 		})
 		return nil
 	}
-	queue.ShuffleGuildQueue(i.GuildID)
+
+	if err := queue.ShuffleGuildQueue(i.GuildID); err != nil {
+		return &interactionError{err: err, message: "Failed to shuffle queue"}
+	}
+
 	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{Content: "🔀 Queue shuffled!"},
+	})
+	return nil
+}
+
+// loopQueue toggles the loop the current song queue
+func loopQueue(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate) *interactionError {
+	// Check if user is in a voice channel and bot is not in a different one
+	if !checkUserVoiceChannel(s, i) {
+		return nil
+	}
+	gq, ok := queue.GetGuildQueue(i.GuildID)
+	if !ok || gq.Session.VC == nil || gq.CurrentSong == nil {
+		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{Content: "🎶 The queue is empty 😶"},
+		})
+		return nil
+	}
+	looped, err := queue.LoopGuildQueue(i.GuildID)
+	if err != nil {
+		return &interactionError{err: err, message: "Failed to toggle loop"}
+	}
+
+	status := "enabled"
+	if !looped {
+		status = "disabled"
+	}
+
+	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content: fmt.Sprintf("🔁 Loop %s", status),
+		},
 	})
 	return nil
 }

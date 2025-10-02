@@ -378,7 +378,7 @@ func (pm *PlaylistManager) processPlaylistSongs(videoIDs []string, i *discordgo.
 	}
 
 	gq, exists := queue.GetGuildQueue(i.GuildID)
-	shouldStartPlayback := !exists || gq.Session.VC == nil || gq.CurrentItem == nil
+	shouldStartPlayback := !exists || gq.Session.VC == nil || gq.CurrentSong == nil
 
 	for _, filename := range filenames {
 		queue.Enqueue(i.GuildID, filename, i.Member.User.Username)
