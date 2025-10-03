@@ -1,11 +1,15 @@
 package queue
 
 import (
+	"Twilight/redis_client"
+	"Twilight/yt"
 	"encoding/binary"
 	"fmt"
 	"io"
 	"math/rand/v2"
+	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
@@ -299,6 +303,13 @@ func PlayNext(s *discordgo.Session, guildID string, vc *discordgo.VoiceConnectio
 		sd.Session.VC = vc
 		session := sd.Session
 		sd.mu.Unlock()
+
+		videoID := strings.TrimSuffix(strings.TrimPrefix(item.Filename, "cache/"), ".mp3")
+		if _, err := os.Stat(item.Filename); os.IsNotExist(err) {
+			yt.DownloadVideo(videoID)
+		} else {
+			redis_client.RDB.Set(redis_client.Ctx, "video:"+videoID, true, 3600*time.Second) // 1 hour TTL
+		}
 
 		err := playAudioFile(vc, item.Filename, session)
 		if err != nil && err.Error() != "EOF" && err.Error() != "unexpected EOF" {

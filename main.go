@@ -6,14 +6,17 @@ import (
 	"Twilight/db_client"
 	"Twilight/handlers"
 	"Twilight/queue"
+	"Twilight/redis_client"
 	"flag"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/Strum355/log"
 	"github.com/bwmarrin/discordgo"
+	"github.com/redis/go-redis/v9"
 	"github.com/spf13/viper"
 )
 
@@ -54,6 +57,8 @@ func main() {
 	log.Info("Bot is initialising")
 
 	db_client.Init()
+
+	StartCacheCleaning()
 
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM)
@@ -96,4 +101,32 @@ func cleanUpCache() {
 	}
 
 	log.Info("Cache cleanup completed")
+}
+
+// StartCacheCleaning starts the mp3 background cleanup
+func StartCacheCleaning() {
+	go func() {
+		for {
+			time.Sleep(1 * time.Hour)
+			routineCacheCleaning()
+		}
+	}()
+}
+
+// routineCacheCleaning cleans up mp3 files which have been unused
+func routineCacheCleaning() {
+	log.Info("Beginning cache cleanup!")
+	cacheDir := "cache"
+	if _, err := os.Stat(cacheDir); os.IsNotExist(err) {
+		return
+	}
+
+	files, _ := os.ReadDir(cacheDir)
+
+	for _, file := range files {
+		_, err := redis_client.RDB.Get(redis_client.Ctx, "video:"+strings.TrimSuffix(file.Name(), ".mp3")).Result()
+		if err == redis.Nil {
+			_ = os.Remove(cacheDir + "/" + file.Name())
+		}
+	}
 }

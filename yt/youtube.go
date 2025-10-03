@@ -20,7 +20,7 @@ func DownloadVideo(videoID string) error {
 		"-o", filename,
 		"https://www.youtube.com/watch?v="+videoID,
 	)
-
+	redis_client.RDB.Set(redis_client.Ctx, "video:"+videoID, true, 3600*time.Second) // 1 hour TTL
 	return cmd.Run()
 }
 

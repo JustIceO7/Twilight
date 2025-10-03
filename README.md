@@ -1,5 +1,7 @@
 # Twilight (Music Discord Bot)
-A Discord bot written in Golang (v1.25.0+) that streams audio concurrently, manages song queues, and supports YouTube playback, playlists, and multiple guilds.
+A Discord bot written in Golang (v1.25.0+) that streams audio concurrently, manages song queues, and supports YouTube playback, playlists, and multiple guilds.  
+  
+Features intelligent audio caching with Redis-based TTL management and automatic cleanup of unused files.
 
 ## Architecture
 - **PostgreSQL**: Persistent storage for user playlists.
