@@ -4,7 +4,7 @@ WORKDIR /app
 
 COPY go.mod go.sum ./
 
-RUN apk add --no-cache ffmpeg ca-certificates opus-dev build-base \
+RUN apk add --no-cache ffmpeg ca-certificates opus-dev build-base yt-dlp \
     && go mod download
 
 COPY . .

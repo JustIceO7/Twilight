@@ -4,7 +4,7 @@ A Discord bot written in Golang (v1.25.0+) that streams audio concurrently, mana
 ## Architecture
 - **PostgreSQL**: Persistent storage for user playlists.
 - **Redis**: In-memory caching for song data.
-- **Docker**: Containerized deployment with docker-compose for easy setup and management. All core dependencies (FFmpeg, PostgreSQL, Redis) are pre-configured within the Docker containers.
+- **Docker**: Containerized deployment with docker-compose for easy setup and management. All core dependencies (FFmpeg, yt-dlp, PostgreSQL, Redis) are pre-configured within the Docker containers.
 
 ## Docker Ports
 - **8080**: Bot application.

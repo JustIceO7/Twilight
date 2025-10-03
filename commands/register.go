@@ -94,7 +94,7 @@ func RegisterSlashCommands(s *discordgo.Session) {
 	commands.Add(
 		&discordgo.ApplicationCommand{
 			Name:        "np",
-			Description: "Show the song that’s now playing.",
+			Description: "Show the song that's now playing.",
 		},
 		currentSong,
 	)

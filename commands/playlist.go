@@ -13,9 +13,6 @@ import (
 func playList(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate) *interactionError {
 	_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{
-			Content: "Please wait...",
-		},
 	})
 
 	data := i.ApplicationCommandData()

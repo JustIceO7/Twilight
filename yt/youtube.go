@@ -3,28 +3,25 @@ package yt
 import (
 	"Twilight/redis_client"
 	"encoding/json"
-	"io"
+	"fmt"
+	"os/exec"
 	"time"
 
 	"github.com/kkdai/youtube/v2"
 )
 
-// FetchVideoStream fetches the audio from a given videoID and returns a stream
-func FetchVideoStream(videoID string) (io.ReadCloser, error) {
-	client := youtube.Client{}
+// DownloadVideo downloads the audio from a given videoID directly to a file
+func DownloadVideo(videoID string) error {
+	filename := fmt.Sprintf("cache/%s.mp3", videoID)
+	cmd := exec.Command("yt-dlp",
+		"-f", "bestaudio",
+		"-x",
+		"--audio-format", "mp3",
+		"-o", filename,
+		"https://www.youtube.com/watch?v="+videoID,
+	)
 
-	video, err := client.GetVideo(videoID)
-	if err != nil {
-		return nil, err
-	}
-
-	formats := video.Formats.WithAudioChannels()
-	stream, _, err := client.GetStream(video, &formats[0])
-	if err != nil {
-		return nil, err
-	}
-
-	return stream, nil
+	return cmd.Run()
 }
 
 // FetchVideoMetadata fetches basic metadata for a given videoID

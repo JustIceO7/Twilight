@@ -6,12 +6,12 @@ import (
 	"Twilight/yt"
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"strconv"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/kkdai/youtube/v2"
 	"github.com/redis/go-redis/v9"
 	"github.com/spf13/viper"
 	"gorm.io/gorm"
@@ -274,7 +274,7 @@ func (pm *PlaylistManager) PlaySong(i *discordgo.InteractionCreate, songID strin
 
 	var videoIDs []string
 	var initialMsg *discordgo.Message
-
+	songID, err = youtube.ExtractVideoID(songID) // Works with URLs as well
 	if songID == "" {
 		// Playing entire playlist
 		var playlist []Playlist
@@ -341,26 +341,9 @@ func (pm *PlaylistManager) processPlaylistSongs(videoIDs []string, i *discordgo.
 		filename := fmt.Sprintf("cache/%s.mp3", videoID)
 
 		if _, err := os.Stat(filename); os.IsNotExist(err) {
-			stream, err := yt.FetchVideoStream(videoID)
+			err := yt.DownloadVideo(videoID)
 			if err != nil {
-				fmt.Printf("DEBUG: FetchVideoStream error: %v\n", err)
-				continue
-			}
-
-			out, err := os.Create(filename)
-			if err != nil {
-				fmt.Printf("DEBUG: Create file error: %v\n", err)
-				stream.Close()
-				continue
-			}
-
-			_, err = io.Copy(out, stream)
-			out.Close()
-			stream.Close()
-
-			if err != nil {
-				fmt.Printf("DEBUG: Copy error: %v\n", err)
-				os.Remove(filename)
+				fmt.Printf("DEBUG: Download error: %v\n", err)
 				continue
 			}
 		}

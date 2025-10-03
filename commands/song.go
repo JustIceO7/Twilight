@@ -3,7 +3,6 @@ package commands
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"strings"
 
@@ -55,12 +54,16 @@ func playSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interactio
 	if !checkUserVoiceChannel(s, i) {
 		return nil
 	}
+
+	_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+	})
+
 	videoURL := i.ApplicationCommandData().Options[0].StringValue()
 	videoID, err := youtube.ExtractVideoID(videoURL)
 	if err != nil {
-		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{Content: "❌ Invalid YouTube link!"},
+		s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+			Content: "❌ Invalid YouTube link!",
 		})
 		return nil
 	}
@@ -72,49 +75,27 @@ func playSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interactio
 
 	filename := fmt.Sprintf("cache/%s.mp3", videoID)
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
-		stream, err := yt.FetchVideoStream(videoID)
+		err := yt.DownloadVideo(videoID)
 		if err != nil {
-			fmt.Printf("DEBUG: FetchVideoStream error: %v\n", err)
-			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{Content: "❌ Could not fetch the video. It may be private or removed."},
+			fmt.Printf("DEBUG: Download error: %v\n", err)
+			s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+				Content: "❌ Could not fetch the video. It may be private or removed.",
 			})
-			return nil
-		}
-
-		out, err := os.Create(filename)
-		if err != nil {
-			fmt.Printf("DEBUG: Create file error: %v\n", err)
-			stream.Close()
-			sendErrorResponse(s, i)
-			return nil
-		}
-
-		_, err = io.Copy(out, stream)
-		out.Close()
-		stream.Close()
-		if err != nil {
-			fmt.Printf("DEBUG: Copy error: %v\n", err)
-			os.Remove(filename)
-			sendErrorResponse(s, i)
 			return nil
 		}
 	}
 
 	currentVideo, err := yt.FetchVideoMetadata(videoID)
 	if err != nil {
-		sendFetchErrorResponse(s, i)
+		s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+			Content: "❌ Could not fetch video metadata.",
+		})
 		return nil
 	}
-	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{
-			Content: fmt.Sprintf("🎵 **%s** added to the queue (`%s`)", currentVideo.Title, utils.FormatYtDuration(currentVideo.Duration)),
-		},
+
+	s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+		Content: fmt.Sprintf("🎵 **%s** added to the queue (`%s`)", currentVideo.Title, utils.FormatYtDuration(currentVideo.Duration)),
 	})
-	if err != nil {
-		return &interactionError{err: err, message: "Failed to respond"}
-	}
 
 	gq := queue.Enqueue(i.GuildID, filename, i.Member.User.Username)
 	if gq.Session.VC == nil {
