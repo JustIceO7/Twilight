@@ -226,7 +226,7 @@ func currentSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interac
 
 	currentSong := gq.CurrentSong
 	status := "▶️ Playing"
-	if gq.Session.IsPaused {
+	if gq.Session.IsPaused() {
 		status = "⏸️ Paused"
 	}
 

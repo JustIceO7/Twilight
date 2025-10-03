@@ -23,7 +23,7 @@ type AudioSession struct {
 	Encoder     *gopus.Encoder             // Opus encoder for sending audio to Discord
 	PcmBuffer   []byte                     // Buffer for raw audio bytes from ffmpeg
 	Int16Buffer []int16                    // Buffer for PCM audio as 16-bit samples
-	IsPaused    bool                       // True if playback is paused
+	isPaused    bool                       // True if playback is paused
 	mu          sync.Mutex                 // Mutex to protect concurrent access
 	stop        chan struct{}              // Channel to signal stopping the session
 	resume      chan struct{}              // Channel to signal resuming from pause
@@ -34,19 +34,26 @@ type AudioSession struct {
 func (s *AudioSession) Pause() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if !s.IsPaused {
-		s.IsPaused = true
+	if !s.isPaused {
+		s.isPaused = true
 		s.resume = make(chan struct{})
 	}
+}
+
+// IsPaused returns true if the audio session is currently paused
+func (s *AudioSession) IsPaused() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.isPaused
 }
 
 // Resume unpauses the audio session, allowing playback to continue
 func (s *AudioSession) Resume() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.IsPaused {
+	if s.isPaused {
 		close(s.resume)
-		s.IsPaused = false
+		s.isPaused = false
 		s.resume = nil
 	}
 }
@@ -131,7 +138,7 @@ func playAudioFile(vc *discordgo.VoiceConnection, filename string, session *Audi
 	session.VC = vc
 	session.Cmd = cmd
 	session.Encoder = encoder
-	session.IsPaused = false
+	session.isPaused = false
 	session.stop = stop
 	session.stopped = false
 	session.mu.Unlock()
@@ -143,7 +150,7 @@ func playAudioFile(vc *discordgo.VoiceConnection, filename string, session *Audi
 
 	for {
 		session.mu.Lock()
-		if session.IsPaused {
+		if session.isPaused {
 			resume := session.resume
 			session.mu.Unlock()
 			ticker.Stop()
