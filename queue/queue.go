@@ -84,6 +84,7 @@ func playAudioFile(vc *discordgo.VoiceConnection, filename string, session *Audi
 		channels         = 2
 		frameSize        = 960
 		maxOpusFrameSize = 4000
+		frameDuration    = 20 * time.Millisecond
 	)
 
 	if !vc.Ready {
@@ -137,13 +138,18 @@ func playAudioFile(vc *discordgo.VoiceConnection, filename string, session *Audi
 
 	defer session.Stop()
 
+	ticker := time.NewTicker(frameDuration)
+	defer ticker.Stop()
+
 	for {
 		session.mu.Lock()
 		if session.IsPaused {
 			resume := session.resume
 			session.mu.Unlock()
+			ticker.Stop()
 			select {
 			case <-resume:
+				ticker = time.NewTicker(frameDuration)
 			case <-session.stop:
 				return nil
 			}
@@ -164,10 +170,12 @@ func playAudioFile(vc *discordgo.VoiceConnection, filename string, session *Audi
 			return err
 		}
 
+		<-ticker.C
+
 		if len(opus) > 0 {
 			select {
 			case vc.OpusSend <- opus:
-			case <-time.After(50 * time.Millisecond):
+			case <-time.After(200 * time.Millisecond):
 				return fmt.Errorf("timeout sending opus frame")
 			case <-stop:
 				return nil
@@ -224,6 +232,7 @@ func ShuffleGuildQueue(guildID string) error {
 	return nil
 }
 
+// LoopGuildQueue toggles loop for the song queue for a given guild
 func LoopGuildQueue(guildID string) (bool, error) {
 	qd, exists := guildSongs[guildID]
 	if !exists {

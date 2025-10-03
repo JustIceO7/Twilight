@@ -13,6 +13,10 @@ func MessageHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 	}
 	prefix := viper.GetString("prefix")
 
+	if len(m.Content) == 0 || len(prefix) == 0 {
+		return
+	}
+
 	// Checking for presence of prefix
 	if m.Content[0] == prefix[0] {
 		messageContent := m.Content
