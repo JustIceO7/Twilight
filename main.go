@@ -106,8 +106,9 @@ func cleanUpCache() {
 // StartCacheCleaning starts the mp3 background cleanup
 func StartCacheCleaning() {
 	go func() {
-		for {
-			time.Sleep(1 * time.Hour)
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
 			routineCacheCleaning()
 		}
 	}()
