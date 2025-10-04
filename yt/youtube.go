@@ -2,7 +2,9 @@ package yt
 
 import (
 	"Twilight/redis_client"
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os/exec"
 	"time"
@@ -19,7 +21,15 @@ func DownloadVideo(videoID string) error {
 		"https://www.youtube.com/watch?v="+videoID,
 	)
 	redis_client.RDB.Set(redis_client.Ctx, "video:"+videoID, true, 3600*time.Second) // 1 hour TTL
-	return cmd.Run()
+	stderr := &bytes.Buffer{}
+	cmd.Stderr = stderr
+
+	err := cmd.Run()
+	if err != nil {
+		return errors.New(stderr.String())
+	}
+
+	return nil
 }
 
 // FetchVideoMetadata fetches basic metadata for a given videoID
