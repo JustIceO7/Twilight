@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/kkdai/youtube/v2"
+	"github.com/spf13/viper"
 )
 
 // DownloadVideo downloads the audio from a given videoID directly to a file
@@ -22,7 +23,7 @@ func DownloadVideo(videoID string) error {
 		"-o", filename,
 		"https://www.youtube.com/watch?v="+videoID,
 	)
-	redis_client.RDB.Set(redis_client.Ctx, "video:"+videoID, true, 3600*time.Second) // 1 hour TTL
+	redis_client.RDB.Set(redis_client.Ctx, "video:"+videoID, true, time.Duration(viper.GetInt("cache.audio"))*time.Second)
 
 	err := youTubeDownload(videoID, filename)
 	if err == nil {
@@ -90,7 +91,7 @@ func FetchVideoMetadata(videoID string) (*youtube.Video, error) {
 
 	// Store in Redis
 	data, _ := json.Marshal(video)
-	redis_client.RDB.Set(redis_client.Ctx, "ytmeta:"+videoID, data, 3600*time.Second) // 1 hour TTL
+	redis_client.RDB.Set(redis_client.Ctx, "ytmeta:"+videoID, data, time.Duration(viper.GetInt("cache.youtube"))*time.Second)
 
 	return video, nil
 }

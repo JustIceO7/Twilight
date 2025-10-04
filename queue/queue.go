@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/spf13/viper"
 	"layeh.com/gopus"
 )
 
@@ -324,7 +325,7 @@ func PlayNext(s *discordgo.Session, guildID string, vc *discordgo.VoiceConnectio
 		if _, err := os.Stat(item.Filename); os.IsNotExist(err) {
 			yt.DownloadVideo(videoID)
 		} else {
-			redis_client.RDB.Set(redis_client.Ctx, "video:"+videoID, true, 3600*time.Second) // 1 hour TTL
+			redis_client.RDB.Set(redis_client.Ctx, "video:"+videoID, true, time.Duration(viper.GetInt("cache.audio"))*time.Second)
 		}
 
 		err := playAudioFile(vc, item.Filename, session)
