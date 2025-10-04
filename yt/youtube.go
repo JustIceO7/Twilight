@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"os"
 	"os/exec"
 	"time"
 
@@ -21,12 +23,49 @@ func DownloadVideo(videoID string) error {
 		"https://www.youtube.com/watch?v="+videoID,
 	)
 	redis_client.RDB.Set(redis_client.Ctx, "video:"+videoID, true, 3600*time.Second) // 1 hour TTL
+
+	err := youTubeDownload(videoID, filename)
+	if err == nil {
+		return nil
+	}
+
 	stderr := &bytes.Buffer{}
 	cmd.Stderr = stderr
 
-	err := cmd.Run()
+	err = cmd.Run()
 	if err != nil {
 		return errors.New(stderr.String())
+	}
+
+	return nil
+}
+
+// youTubeDownload downloads audio from a given videoID directly to a file using YouTube client
+func youTubeDownload(videoID, filename string) error {
+	client := youtube.Client{}
+	video, err := client.GetVideo("https://www.youtube.com/watch?v=" + videoID)
+	if err != nil {
+		return err
+	}
+
+	formats := video.Formats.WithAudioChannels()
+
+	stream, _, err := client.GetStream(video, &formats[0])
+	if err != nil {
+		return err
+	}
+	defer stream.Close()
+
+	file, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	_, err = io.Copy(file, stream)
+	if err != nil {
+		os.Remove(filename)
+		return err
 	}
 
 	return nil
