@@ -73,7 +73,7 @@ func playSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interactio
 		return nil
 	}
 
-	filename := fmt.Sprintf("cache/%s.mp3", videoID)
+	filename := fmt.Sprintf("cache/%s.opus", videoID)
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
 		err := yt.DownloadVideo(videoID)
 		if err != nil {
@@ -230,7 +230,7 @@ func currentSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interac
 		status = "⏸️ Paused"
 	}
 
-	currentID := strings.TrimSuffix(strings.TrimPrefix(currentSong.Filename, "cache/"), ".mp3")
+	currentID := strings.TrimSuffix(strings.TrimPrefix(currentSong.Filename, "cache/"), ".opus")
 	currentVideo, err := yt.FetchVideoMetadata(currentID)
 	if err != nil {
 		sendFetchErrorResponse(s, i)
@@ -258,7 +258,7 @@ func currentSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interac
 			queueLimit = 5
 		}
 		for idx, item := range gq.Songs[:queueLimit] {
-			itemID := strings.TrimSuffix(strings.TrimPrefix(item.Filename, "cache/"), ".mp3")
+			itemID := strings.TrimSuffix(strings.TrimPrefix(item.Filename, "cache/"), ".opus")
 			video, err := yt.FetchVideoMetadata(itemID)
 			if err != nil {
 				sendFetchErrorResponse(s, i)
@@ -313,7 +313,7 @@ func currentQueue(ctx context.Context, s *discordgo.Session, i *discordgo.Intera
 	}
 
 	queueText := ""
-	currentID := strings.TrimSuffix(strings.TrimPrefix(gq.CurrentSong.Filename, "cache/"), ".mp3")
+	currentID := strings.TrimSuffix(strings.TrimPrefix(gq.CurrentSong.Filename, "cache/"), ".opus")
 	currentVideo, err := yt.FetchVideoMetadata(currentID)
 	if err != nil {
 		sendFetchErrorResponse(s, i)
@@ -322,7 +322,7 @@ func currentQueue(ctx context.Context, s *discordgo.Session, i *discordgo.Intera
 	queueText += fmt.Sprintf("1. `%s` (requested by %s) ▶️\n", currentVideo.Title, gq.CurrentSong.RequestedBy)
 
 	for idx, item := range gq.Songs {
-		itemID := strings.TrimSuffix(strings.TrimPrefix(item.Filename, "cache/"), ".mp3")
+		itemID := strings.TrimSuffix(strings.TrimPrefix(item.Filename, "cache/"), ".opus")
 		video, err := yt.FetchVideoMetadata(itemID)
 		if err != nil {
 			sendFetchErrorResponse(s, i)

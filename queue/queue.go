@@ -95,7 +95,7 @@ func playAudioFile(vc *discordgo.VoiceConnection, filename string, session *Audi
 	)
 
 	if !vc.Ready {
-		for i := 0; i < 20; i++ {
+		for range 20 {
 			time.Sleep(100 * time.Millisecond)
 			if vc.Ready {
 				break
@@ -131,7 +131,7 @@ func playAudioFile(vc *discordgo.VoiceConnection, filename string, session *Audi
 		return err
 	}
 
-	buf := make([]int16, frameSize*channels)
+	pcmBuffer := make([]int16, frameSize*channels)
 	stop := make(chan struct{})
 
 	session.mu.Lock()
@@ -164,7 +164,7 @@ func playAudioFile(vc *discordgo.VoiceConnection, filename string, session *Audi
 		}
 		session.mu.Unlock()
 
-		err := binary.Read(stdout, binary.LittleEndian, buf)
+		err := binary.Read(stdout, binary.LittleEndian, pcmBuffer)
 		if err != nil {
 			if err == io.EOF {
 				break
@@ -172,16 +172,16 @@ func playAudioFile(vc *discordgo.VoiceConnection, filename string, session *Audi
 			return err
 		}
 
-		opus, err := encoder.Encode(buf, frameSize, maxOpusFrameSize)
+		opusFrame, err := encoder.Encode(pcmBuffer, frameSize, maxOpusFrameSize)
 		if err != nil {
 			return err
 		}
 
 		<-ticker.C
 
-		if len(opus) > 0 {
+		if len(opusFrame) > 0 {
 			select {
-			case vc.OpusSend <- opus:
+			case vc.OpusSend <- opusFrame:
 			case <-time.After(200 * time.Millisecond):
 				return fmt.Errorf("timeout sending opus frame")
 			case <-stop:
@@ -320,7 +320,7 @@ func PlayNext(s *discordgo.Session, guildID string, vc *discordgo.VoiceConnectio
 		session := sd.Session
 		sd.mu.Unlock()
 
-		videoID := strings.TrimSuffix(strings.TrimPrefix(item.Filename, "cache/"), ".mp3")
+		videoID := strings.TrimSuffix(strings.TrimPrefix(item.Filename, "cache/"), ".opus")
 		if _, err := os.Stat(item.Filename); os.IsNotExist(err) {
 			yt.DownloadVideo(videoID)
 		} else {
@@ -375,7 +375,7 @@ func GetGuildQueue(guildID string) (*GuildQueue, bool) {
 func DeleteGuildQueue(guildID string) {
 	if sd, exists := guildSessions[guildID]; exists {
 		sd.mu.Lock()
-		if sd.Session != nil {
+		if sd.Session != nil && !sd.Session.stopped {
 			sd.Session.Stop()
 		}
 		sd.mu.Unlock()

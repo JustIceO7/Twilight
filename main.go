@@ -103,7 +103,7 @@ func cleanUpCache() {
 	log.Info("Cache cleanup completed")
 }
 
-// StartCacheCleaning starts the mp3 background cleanup
+// StartCacheCleaning starts the opus background cleanup
 func StartCacheCleaning() {
 	go func() {
 		ticker := time.NewTicker(1 * time.Hour)
@@ -114,7 +114,7 @@ func StartCacheCleaning() {
 	}()
 }
 
-// routineCacheCleaning cleans up mp3 files which have been unused
+// routineCacheCleaning cleans up opus files which have been unused
 func routineCacheCleaning() {
 	log.Info("Beginning cache cleanup!")
 	cacheDir := "cache"
@@ -125,7 +125,7 @@ func routineCacheCleaning() {
 	files, _ := os.ReadDir(cacheDir)
 
 	for _, file := range files {
-		_, err := redis_client.RDB.Get(redis_client.Ctx, "video:"+strings.TrimSuffix(file.Name(), ".mp3")).Result()
+		_, err := redis_client.RDB.Get(redis_client.Ctx, "video:"+strings.TrimSuffix(file.Name(), ".opus")).Result()
 		if err == redis.Nil {
 			_ = os.Remove(cacheDir + "/" + file.Name())
 		}

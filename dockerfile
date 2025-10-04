@@ -9,6 +9,8 @@ RUN apk add --no-cache ffmpeg ca-certificates opus-dev build-base yt-dlp \
 
 COPY . .
 
+ENV CGO_CFLAGS="-w -O2"
+
 RUN mkdir -p /app/cache && chmod 755 /app/cache \
     && go build -o twilight .
 

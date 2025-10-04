@@ -338,7 +338,7 @@ func (pm *PlaylistManager) processPlaylistSongs(videoIDs []string, i *discordgo.
 	var filenames []string
 
 	for _, videoID := range videoIDs {
-		filename := fmt.Sprintf("cache/%s.mp3", videoID)
+		filename := fmt.Sprintf("cache/%s.opus", videoID)
 
 		if _, err := os.Stat(filename); os.IsNotExist(err) {
 			err := yt.DownloadVideo(videoID)
