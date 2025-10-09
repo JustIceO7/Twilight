@@ -7,8 +7,8 @@ import (
 	"Twilight/utils"
 	"Twilight/yt"
 	"fmt"
-	"os"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -335,23 +335,41 @@ func (pm *PlaylistManager) PlaySong(i *discordgo.InteractionCreate, songID strin
 
 // processPlaylistSongs handles downloading and queuing songs
 func (pm *PlaylistManager) processPlaylistSongs(videoIDs []string, i *discordgo.InteractionCreate, vc *discordgo.VoiceConnection, initialMsg *discordgo.Message) {
-	successCount := 0
-	var filenames []string
 	ytManager := yt.NewYouTubeManager(redis_client.RDB)
 
-	for _, videoID := range videoIDs {
-		filename := utils.GetAudioFile(videoID)
+	successCount := 0
+	orderedFilenames := make([]string, len(videoIDs)) // Keeping order of songs
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	concurrencySem := make(chan struct{}, 3) // Limit maximum amount of downloads at a time
 
-		if _, err := os.Stat(filename); os.IsNotExist(err) {
-			err := ytManager.DownloadAudio(videoID)
-			if err != nil {
-				fmt.Printf("DEBUG: Download error: %v\n", err)
-				continue
+	for idx, videoID := range videoIDs {
+		wg.Add(1)
+		go func(index int, vid string) {
+			defer wg.Done()
+
+			concurrencySem <- struct{}{}
+			defer func() { <-concurrencySem }()
+
+			if err := ytManager.DownloadAudio(vid); err != nil {
+				fmt.Printf("DEBUG: Download error for %s: %v\n", vid, err)
+				return
 			}
-		}
 
-		filenames = append(filenames, filename)
-		successCount++
+			mu.Lock()
+			orderedFilenames[index] = utils.GetAudioFile(vid)
+			successCount++
+			mu.Unlock()
+		}(idx, videoID)
+	}
+	wg.Wait()
+
+	// Filter out empty failed downloads
+	var filenames []string
+	for _, fn := range orderedFilenames {
+		if fn != "" {
+			filenames = append(filenames, fn)
+		}
 	}
 
 	if successCount == 0 {

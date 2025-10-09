@@ -18,6 +18,7 @@ func DownloadAudioFile(videoID string) error {
 		"-f", "bestaudio/best",
 		"-x",
 		"--audio-format", "opus",
+		"--buffer-size", "16K",
 		"-o", filename,
 		"https://www.youtube.com/watch?v="+videoID,
 	)
