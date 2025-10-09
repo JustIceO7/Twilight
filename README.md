@@ -19,22 +19,14 @@ Features intelligent audio caching with Redis-based TTL management and automatic
 git clone https://github.com/JustIceO7/Twilight.git
 ```
 
-2. Create a .env file in the root directory with:
-```
-discord_token=your_discord_token
-discord_app_id=your_app_id
-prefix=bot_prefix
-theme=bot_theme_hexcode
-```
-
-3. Add the bot to your Discord server with permissions to connect to voice channels, post messages, react and speak.
+2. Add the bot to your Discord server with permissions to connect to voice channels, post messages, react and speak.
    
-4. Ensure ***`MESSAGE CONTENT INTENT`*** is `ON` within Discord Developer Application.
+3. Ensure ***`MESSAGE CONTENT INTENT`*** is `ON` within Discord Developer Application.
 <img width="1408" height="136" alt="image" src="https://github.com/user-attachments/assets/685cd65b-ff38-466e-83b4-b12834abfa2e" />
 
-5. Install Docker Desktop (Windows/macOS) or Docker Engine (Linux).
+4. Install Docker Desktop (Windows/macOS) or Docker Engine (Linux).
   
-6. Run the application:
+5. Run the application:
 ```
 docker-compose up
 ```

@@ -14,7 +14,13 @@ var (
 )
 
 func Init() {
-	dsn := "postgres://postgres:postgres@postgres:5432/postgres"
+	user := os.Getenv("postgres_user")
+	pass := os.Getenv("postgres_password")
+	host := os.Getenv("postgres_host")
+	port := os.Getenv("postgres_port")
+	dbname := os.Getenv("postgres_db")
+
+	dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s", user, pass, host, port, dbname)
 
 	var err error
 	for range 10 {
