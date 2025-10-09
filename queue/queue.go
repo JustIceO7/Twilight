@@ -2,6 +2,7 @@ package queue
 
 import (
 	"Twilight/redis_client"
+	"Twilight/utils"
 	"Twilight/yt"
 	"encoding/binary"
 	"fmt"
@@ -9,12 +10,10 @@ import (
 	"math/rand/v2"
 	"os"
 	"os/exec"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/spf13/viper"
 	"layeh.com/gopus"
 )
 
@@ -299,6 +298,7 @@ func PlayNext(s *discordgo.Session, guildID string, vc *discordgo.VoiceConnectio
 	if !exists {
 		return
 	}
+	ytManager := yt.NewYouTubeManager(redis_client.RDB)
 
 	for {
 		qd.mu.Lock()
@@ -321,11 +321,9 @@ func PlayNext(s *discordgo.Session, guildID string, vc *discordgo.VoiceConnectio
 		session := sd.Session
 		sd.mu.Unlock()
 
-		videoID := strings.TrimSuffix(strings.TrimPrefix(item.Filename, "cache/"), ".opus")
+		videoID := utils.GetAudioID(item.Filename)
 		if _, err := os.Stat(item.Filename); os.IsNotExist(err) {
-			yt.DownloadVideo(videoID)
-		} else {
-			redis_client.RDB.Set(redis_client.Ctx, "video:"+videoID, true, time.Duration(viper.GetInt("cache.audio"))*time.Second)
+			ytManager.DownloadAudio(videoID)
 		}
 
 		err := playAudioFile(vc, item.Filename, session)

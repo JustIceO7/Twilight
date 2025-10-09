@@ -7,10 +7,10 @@ import (
 	"Twilight/handlers"
 	"Twilight/queue"
 	"Twilight/redis_client"
+	"Twilight/utils"
 	"flag"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -125,7 +125,7 @@ func routineCacheCleaning() {
 	files, _ := os.ReadDir(cacheDir)
 
 	for _, file := range files {
-		_, err := redis_client.RDB.Get(redis_client.Ctx, "video:"+strings.TrimSuffix(file.Name(), ".opus")).Result()
+		_, err := redis_client.RDB.Get(redis_client.Ctx, "ytvideo:"+utils.GetAudioID(file.Name())).Result()
 		if err == redis.Nil {
 			_ = os.Remove(cacheDir + "/" + file.Name())
 		}

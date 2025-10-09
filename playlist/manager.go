@@ -3,8 +3,9 @@ package playlist
 import (
 	"Twilight/db_client"
 	"Twilight/queue"
+	"Twilight/redis_client"
+	"Twilight/utils"
 	"Twilight/yt"
-	"context"
 	"fmt"
 	"os"
 	"strconv"
@@ -18,10 +19,9 @@ import (
 )
 
 type PlaylistManager struct {
-	Session *discordgo.Session
-	Redis   *redis.Client
-	Ctx     context.Context
-	DB      *gorm.DB
+	session *discordgo.Session
+	redis   *redis.Client
+	db      *gorm.DB
 }
 
 type User struct {
@@ -53,12 +53,12 @@ func (pm *PlaylistManager) ShowPlaylist(i *discordgo.InteractionCreate) {
 	userID, _ := strconv.ParseInt(i.Member.User.ID, 10, 64)
 
 	var playlist []Playlist
-	if err := pm.DB.Where("user_id = ?", userID).Preload("Song").Find(&playlist).Error; err != nil || len(playlist) == 0 {
+	if err := pm.db.Where("user_id = ?", userID).Preload("Song").Find(&playlist).Error; err != nil || len(playlist) == 0 {
 		content := "Looks like your playlist is empty. Add some songs to get started! 🎵"
 		if err != nil {
 			content = "Oops! Something went wrong while fetching your playlist. 😅"
 		}
-		pm.Session.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+		pm.session.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
 			Flags:   1 << 6, // Whisper Flag
 			Content: content,
 		})
@@ -66,13 +66,13 @@ func (pm *PlaylistManager) ShowPlaylist(i *discordgo.InteractionCreate) {
 	}
 
 	embed := CreatePlaylistEmbed(playlist, 0, SONGS_PER_PAGE)
-	msg, _ := pm.Session.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+	msg, _ := pm.session.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
 		Embeds: []*discordgo.MessageEmbed{embed},
 	})
 
 	if len(playlist) > SONGS_PER_PAGE {
-		pm.Session.MessageReactionAdd(i.ChannelID, msg.ID, "◀️")
-		pm.Session.MessageReactionAdd(i.ChannelID, msg.ID, "▶️")
+		pm.session.MessageReactionAdd(i.ChannelID, msg.ID, "◀️")
+		pm.session.MessageReactionAdd(i.ChannelID, msg.ID, "▶️")
 	}
 }
 
@@ -155,16 +155,17 @@ func HandlePlaylistReactions(s *discordgo.Session, r *discordgo.MessageReactionA
 func (pm *PlaylistManager) AddSong(i *discordgo.InteractionCreate, url string) {
 	userID, err := strconv.ParseInt(i.Member.User.ID, 10, 64)
 	if err != nil {
-		pm.Session.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+		pm.session.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
 			Flags:   1 << 6, // Whisper Flag
 			Content: "Invalid user ID",
 		})
 		return
 	}
+	ytManager := yt.NewYouTubeManager(redis_client.RDB)
 
-	data, err := yt.FetchVideoMetadata(url)
+	data, err := ytManager.GetVideoMetadata(url)
 	if err != nil {
-		pm.Session.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+		pm.session.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
 			Content: "Oops! Something went wrong while adding to your playlist. 😅",
 		})
 		return
@@ -181,8 +182,8 @@ func (pm *PlaylistManager) AddSong(i *discordgo.InteractionCreate, url string) {
 		URL:         url,
 	}
 
-	if err := pm.DB.FirstOrCreate(&song, Song{ID: data.ID}).Error; err != nil {
-		pm.Session.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+	if err := pm.db.FirstOrCreate(&song, Song{ID: data.ID}).Error; err != nil {
+		pm.session.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
 			Flags:   1 << 6, // Whisper Flag
 			Content: "Failed to save `" + song.Title + "` to database",
 		})
@@ -190,23 +191,23 @@ func (pm *PlaylistManager) AddSong(i *discordgo.InteractionCreate, url string) {
 	}
 
 	var existing Playlist
-	if err := pm.DB.Where("user_id = ? AND song_id = ?", userID, song.ID).First(&existing).Error; err == nil {
-		pm.Session.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+	if err := pm.db.Where("user_id = ? AND song_id = ?", userID, song.ID).First(&existing).Error; err == nil {
+		pm.session.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
 			Flags:   1 << 6, // Whisper Flag
 			Content: "`" + song.Title + "` is already in your playlist",
 		})
 		return
 	}
 
-	if err := pm.DB.Create(&Playlist{UserID: userID, SongID: song.ID}).Error; err != nil {
-		pm.Session.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+	if err := pm.db.Create(&Playlist{UserID: userID, SongID: song.ID}).Error; err != nil {
+		pm.session.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
 			Flags:   1 << 6, // Whisper Flag
 			Content: "Failed to add `" + song.Title + "` to playlist",
 		})
 		return
 	}
 
-	pm.Session.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+	pm.session.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
 		Flags:   1 << 6, // Whisper Flag
 		Content: "`" + song.Title + "` added to playlist",
 	})
@@ -216,7 +217,7 @@ func (pm *PlaylistManager) AddSong(i *discordgo.InteractionCreate, url string) {
 func (pm *PlaylistManager) RemoveSong(i *discordgo.InteractionCreate, songID string) {
 	userID, err := strconv.ParseInt(i.Member.User.ID, 10, 64)
 	if err != nil {
-		pm.Session.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+		pm.session.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
 			Flags:   1 << 6, // Whisper Flag
 			Content: "Invalid user ID",
 		})
@@ -224,14 +225,14 @@ func (pm *PlaylistManager) RemoveSong(i *discordgo.InteractionCreate, songID str
 	}
 
 	if err := pm.removeSong(userID, songID); err != nil {
-		pm.Session.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+		pm.session.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
 			Flags:   1 << 6, // Whisper Flag
 			Content: "Failed to remove song `" + songID + "`",
 		})
 		return
 	}
 
-	pm.Session.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+	pm.session.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
 		Flags:   1 << 6, // Whisper Flag
 		Content: "Song `" + songID + "` removed",
 	})
@@ -241,7 +242,7 @@ func (pm *PlaylistManager) RemoveSong(i *discordgo.InteractionCreate, songID str
 func (pm *PlaylistManager) ClearPlaylist(i *discordgo.InteractionCreate) {
 	userID, err := strconv.ParseInt(i.Member.User.ID, 10, 64)
 	if err != nil {
-		pm.Session.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+		pm.session.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
 			Flags:   1 << 6, // Whisper Flag
 			Content: "Invalid user ID",
 		})
@@ -249,13 +250,13 @@ func (pm *PlaylistManager) ClearPlaylist(i *discordgo.InteractionCreate) {
 	}
 
 	var playlist []Playlist
-	pm.DB.Where("user_id = ?", userID).Find(&playlist)
+	pm.db.Where("user_id = ?", userID).Find(&playlist)
 
 	for _, p := range playlist {
 		pm.removeSong(userID, p.SongID)
 	}
 
-	pm.Session.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+	pm.session.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
 		Flags:   1 << 6, // Whisper Flag
 		Content: "All done! Your playlist has been cleared. ✨",
 	})
@@ -265,7 +266,7 @@ func (pm *PlaylistManager) ClearPlaylist(i *discordgo.InteractionCreate) {
 func (pm *PlaylistManager) PlaySong(i *discordgo.InteractionCreate, songID string, voiceConnection *discordgo.VoiceConnection) {
 	userID, err := strconv.ParseInt(i.Member.User.ID, 10, 64)
 	if err != nil {
-		pm.Session.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+		pm.session.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
 			Flags:   1 << 6, // Whisper Flag
 			Content: "Invalid user ID",
 		})
@@ -278,8 +279,8 @@ func (pm *PlaylistManager) PlaySong(i *discordgo.InteractionCreate, songID strin
 	if songID == "" {
 		// Playing entire playlist
 		var playlist []Playlist
-		if err := pm.DB.Where("user_id = ?", userID).Preload("Song").Find(&playlist).Error; err != nil {
-			pm.Session.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+		if err := pm.db.Where("user_id = ?", userID).Preload("Song").Find(&playlist).Error; err != nil {
+			pm.session.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
 				Flags:   1 << 6, // Whisper Flag
 				Content: "Oops! Something went wrong while fetching your playlist. 😅",
 			})
@@ -287,7 +288,7 @@ func (pm *PlaylistManager) PlaySong(i *discordgo.InteractionCreate, songID strin
 		}
 
 		if len(playlist) == 0 {
-			pm.Session.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+			pm.session.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
 				Flags:   1 << 6, // Whisper Flag
 				Content: "Looks like your playlist is empty. Add some songs to get started! 🎵",
 			})
@@ -298,7 +299,7 @@ func (pm *PlaylistManager) PlaySong(i *discordgo.InteractionCreate, songID strin
 			videoIDs = append(videoIDs, p.Song.ID)
 		}
 
-		initialMsg, err = pm.Session.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+		initialMsg, err = pm.session.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
 			Flags:   1 << 6, // Whisper Flag
 			Content: fmt.Sprintf("Queuing %d song(s) from your playlist...", len(videoIDs)),
 		})
@@ -309,8 +310,8 @@ func (pm *PlaylistManager) PlaySong(i *discordgo.InteractionCreate, songID strin
 	} else {
 		// Playing selected song
 		var playlist Playlist
-		if err := pm.DB.Where("user_id = ? AND song_id = ?", userID, songID).Preload("Song").First(&playlist).Error; err != nil {
-			pm.Session.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+		if err := pm.db.Where("user_id = ? AND song_id = ?", userID, songID).Preload("Song").First(&playlist).Error; err != nil {
+			pm.session.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
 				Flags:   1 << 6, // Whisper Flag
 				Content: "Song not found in your playlist",
 			})
@@ -319,7 +320,7 @@ func (pm *PlaylistManager) PlaySong(i *discordgo.InteractionCreate, songID strin
 
 		videoIDs = []string{playlist.Song.ID}
 
-		initialMsg, err = pm.Session.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+		initialMsg, err = pm.session.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
 			Flags:   1 << 6, // Whisper Flag
 			Content: fmt.Sprintf("Queuing `%s`...", playlist.Song.Title),
 		})
@@ -336,12 +337,13 @@ func (pm *PlaylistManager) PlaySong(i *discordgo.InteractionCreate, songID strin
 func (pm *PlaylistManager) processPlaylistSongs(videoIDs []string, i *discordgo.InteractionCreate, vc *discordgo.VoiceConnection, initialMsg *discordgo.Message) {
 	successCount := 0
 	var filenames []string
+	ytManager := yt.NewYouTubeManager(redis_client.RDB)
 
 	for _, videoID := range videoIDs {
-		filename := fmt.Sprintf("cache/%s.opus", videoID)
+		filename := utils.GetAudioFile(videoID)
 
 		if _, err := os.Stat(filename); os.IsNotExist(err) {
-			err := yt.DownloadVideo(videoID)
+			err := ytManager.DownloadAudio(videoID)
 			if err != nil {
 				fmt.Printf("DEBUG: Download error: %v\n", err)
 				continue
@@ -354,7 +356,7 @@ func (pm *PlaylistManager) processPlaylistSongs(videoIDs []string, i *discordgo.
 
 	if successCount == 0 {
 		failMsg := "Oops! Couldn't download any songs from your playlist. 😅"
-		pm.Session.FollowupMessageEdit(i.Interaction, initialMsg.ID, &discordgo.WebhookEdit{
+		pm.session.FollowupMessageEdit(i.Interaction, initialMsg.ID, &discordgo.WebhookEdit{
 			Content: &failMsg,
 		})
 		return
@@ -368,7 +370,7 @@ func (pm *PlaylistManager) processPlaylistSongs(videoIDs []string, i *discordgo.
 	}
 
 	if shouldStartPlayback {
-		go queue.PlayNext(pm.Session, i.GuildID, vc)
+		go queue.PlayNext(pm.session, i.GuildID, vc)
 	}
 
 	// Update user with final status by editing the initial message
@@ -388,28 +390,27 @@ func (pm *PlaylistManager) processPlaylistSongs(videoIDs []string, i *discordgo.
 		}
 	}
 
-	pm.Session.FollowupMessageEdit(i.Interaction, initialMsg.ID, &discordgo.WebhookEdit{
+	pm.session.FollowupMessageEdit(i.Interaction, initialMsg.ID, &discordgo.WebhookEdit{
 		Content: &finalContent,
 	})
 }
 
 // Newmanager returns a new instance of PlayListManager
-func NewManager(s *discordgo.Session, r *redis.Client, db *gorm.DB, ctx context.Context) *PlaylistManager {
+func NewManager(s *discordgo.Session, r *redis.Client, db *gorm.DB) *PlaylistManager {
 	return &PlaylistManager{
-		Session: s,
-		Redis:   r,
-		DB:      db,
-		Ctx:     ctx,
+		session: s,
+		redis:   r,
+		db:      db,
 	}
 }
 
 // removeSong removes a song from a users playlist, cleaning up any unused song entries
 func (pm *PlaylistManager) removeSong(userID int64, songID string) error {
-	if err := pm.DB.Where("user_id = ? AND song_id = ?", userID, songID).Delete(&Playlist{}).Error; err != nil {
+	if err := pm.db.Where("user_id = ? AND song_id = ?", userID, songID).Delete(&Playlist{}).Error; err != nil {
 		return err
 	}
 
-	if err := pm.DB.Exec(`
+	if err := pm.db.Exec(`
 		DELETE FROM songs
 		WHERE id = ?
 		  AND NOT EXISTS (
@@ -430,7 +431,7 @@ func (pm *PlaylistManager) EnsureUserExists(i *discordgo.InteractionCreate) erro
 	}
 
 	user := User{UserID: userID}
-	return pm.DB.FirstOrCreate(&user, User{
+	return pm.db.FirstOrCreate(&user, User{
 		UserID: userID,
 	}).Error
 }

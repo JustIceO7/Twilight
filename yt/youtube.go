@@ -1,29 +1,24 @@
 package yt
 
 import (
-	"Twilight/redis_client"
+	"Twilight/utils"
 	"bytes"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"os/exec"
-	"time"
 
 	"github.com/kkdai/youtube/v2"
-	"github.com/spf13/viper"
 )
 
-// DownloadVideo downloads the audio from a given videoID directly to a file
-func DownloadVideo(videoID string) error {
-	filename := fmt.Sprintf("cache/%s.opus", videoID)
+// DownloadAudioFile downloads the audio from a given videoID directly to a file
+func DownloadAudioFile(videoID string) error {
+	filename := utils.GetAudioFile(videoID)
 	cmd := exec.Command("yt-dlp",
 		"-f", "bestaudio[ext=opus]/bestaudio",
 		"-o", filename,
 		"https://www.youtube.com/watch?v="+videoID,
 	)
-	redis_client.RDB.Set(redis_client.Ctx, "video:"+videoID, true, time.Duration(viper.GetInt("cache.audio"))*time.Second)
 
 	err := youTubeDownload(videoID, filename)
 	if err == nil {
@@ -74,24 +69,12 @@ func youTubeDownload(videoID, filename string) error {
 
 // FetchVideoMetadata fetches basic metadata for a given videoID
 func FetchVideoMetadata(videoID string) (*youtube.Video, error) {
-	// Try Redis
-	cached, err := redis_client.RDB.Get(redis_client.Ctx, "ytmeta:"+videoID).Result()
-	if err == nil && cached != "" {
-		var video youtube.Video
-		json.Unmarshal([]byte(cached), &video)
-		return &video, nil
-	}
-
 	// Fetch from Youtube
 	client := youtube.Client{}
 	video, err := client.GetVideo(videoID)
 	if err != nil {
 		return nil, err
 	}
-
-	// Store in Redis
-	data, _ := json.Marshal(video)
-	redis_client.RDB.Set(redis_client.Ctx, "ytmeta:"+videoID, data, time.Duration(viper.GetInt("cache.youtube"))*time.Second)
 
 	return video, nil
 }

@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 
 	"Twilight/queue"
+	"Twilight/redis_client"
 	"Twilight/utils"
 	"Twilight/yt"
 
@@ -26,7 +26,9 @@ func songInfo(ctx context.Context, s *discordgo.Session, i *discordgo.Interactio
 		})
 		return nil
 	}
-	videoMetadata, err := yt.FetchVideoMetadata(videoID)
+	ytManager := yt.NewYouTubeManager(redis_client.RDB)
+
+	videoMetadata, err := ytManager.GetVideoMetadata(videoID)
 	if err != nil {
 		sendFetchErrorResponse(s, i)
 		return nil
@@ -72,10 +74,11 @@ func playSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interactio
 	if err != nil {
 		return nil
 	}
+	ytManager := yt.NewYouTubeManager(redis_client.RDB)
 
-	filename := fmt.Sprintf("cache/%s.opus", videoID)
+	filename := utils.GetAudioFile(videoID)
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
-		err := yt.DownloadVideo(videoID)
+		err := ytManager.DownloadAudio(videoID)
 		if err != nil {
 			fmt.Printf("DEBUG: Download error: %v\n", err)
 			s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
@@ -85,7 +88,7 @@ func playSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interactio
 		}
 	}
 
-	currentVideo, err := yt.FetchVideoMetadata(videoID)
+	currentVideo, err := ytManager.GetVideoMetadata(videoID)
 	if err != nil {
 		s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
 			Content: "❌ Could not fetch video metadata.",
@@ -229,9 +232,10 @@ func currentSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interac
 	if gq.Session.IsPaused() {
 		status = "⏸️ Paused"
 	}
+	ytManager := yt.NewYouTubeManager(redis_client.RDB)
 
-	currentID := strings.TrimSuffix(strings.TrimPrefix(currentSong.Filename, "cache/"), ".opus")
-	currentVideo, err := yt.FetchVideoMetadata(currentID)
+	currentID := utils.GetAudioID(currentSong.Filename)
+	currentVideo, err := ytManager.GetVideoMetadata(currentID)
 	if err != nil {
 		sendFetchErrorResponse(s, i)
 		return nil
@@ -258,8 +262,8 @@ func currentSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interac
 			queueLimit = 5
 		}
 		for idx, item := range gq.Songs[:queueLimit] {
-			itemID := strings.TrimSuffix(strings.TrimPrefix(item.Filename, "cache/"), ".opus")
-			video, err := yt.FetchVideoMetadata(itemID)
+			itemID := utils.GetAudioID(item.Filename)
+			video, err := ytManager.GetVideoMetadata(itemID)
 			if err != nil {
 				sendFetchErrorResponse(s, i)
 				return nil
@@ -311,10 +315,11 @@ func currentQueue(ctx context.Context, s *discordgo.Session, i *discordgo.Intera
 		Title: fmt.Sprintf("🎶 Queue for `%s`", guild.Name),
 		Color: viper.GetInt("theme"),
 	}
+	ytManager := yt.NewYouTubeManager(redis_client.RDB)
 
 	queueText := ""
-	currentID := strings.TrimSuffix(strings.TrimPrefix(gq.CurrentSong.Filename, "cache/"), ".opus")
-	currentVideo, err := yt.FetchVideoMetadata(currentID)
+	currentID := utils.GetAudioID(gq.CurrentSong.Filename)
+	currentVideo, err := ytManager.GetVideoMetadata(currentID)
 	if err != nil {
 		sendFetchErrorResponse(s, i)
 		return nil
@@ -322,8 +327,8 @@ func currentQueue(ctx context.Context, s *discordgo.Session, i *discordgo.Intera
 	queueText += fmt.Sprintf("1. `%s` (requested by %s) ▶️\n", currentVideo.Title, gq.CurrentSong.RequestedBy)
 
 	for idx, item := range gq.Songs {
-		itemID := strings.TrimSuffix(strings.TrimPrefix(item.Filename, "cache/"), ".opus")
-		video, err := yt.FetchVideoMetadata(itemID)
+		itemID := utils.GetAudioID(item.Filename)
+		video, err := ytManager.GetVideoMetadata(itemID)
 		if err != nil {
 			sendFetchErrorResponse(s, i)
 			return nil

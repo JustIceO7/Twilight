@@ -25,7 +25,7 @@ func playList(ctx context.Context, s *discordgo.Session, i *discordgo.Interactio
 		value = options[0].Options[0].StringValue()
 	}
 
-	pm := playlist.NewManager(s, redis_client.RDB, db_client.DB, context.Background())
+	pm := playlist.NewManager(s, redis_client.RDB, db_client.DB)
 	pm.EnsureUserExists(i)
 
 	switch subCmd {
