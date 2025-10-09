@@ -15,7 +15,9 @@ import (
 func DownloadAudioFile(videoID string) error {
 	filename := utils.GetAudioFile(videoID)
 	cmd := exec.Command("yt-dlp",
-		"-f", "bestaudio[ext=opus]/bestaudio",
+		"-f", "bestaudio/best",
+		"-x",
+		"--audio-format", "opus",
 		"-o", filename,
 		"https://www.youtube.com/watch?v="+videoID,
 	)

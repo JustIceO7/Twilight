@@ -383,6 +383,28 @@ func DeleteGuildQueue(guildID string) {
 	delete(guildSongs, guildID)
 }
 
+// ClearGuildQueue stops the current song and clears all queued songs for a guild
+func ClearGuildQueue(guildID string) {
+	qd, exists := guildSongs[guildID]
+	sd, sExists := guildSessions[guildID]
+	if !exists || !sExists {
+		return
+	}
+
+	// Stop the session
+	sd.mu.Lock()
+	if sd.Session != nil && !sd.Session.stopped {
+		sd.Session.Stop()
+	}
+	sd.mu.Unlock()
+
+	// Clear queue
+	qd.mu.Lock()
+	qd.Songs = []*QueueSong{}
+	qd.CurrentSong = nil
+	qd.mu.Unlock()
+}
+
 // ClearCurrentSong clears the currently playing item for a guild
 func ClearCurrentSong(guildID string) {
 	qd, exists := guildSongs[guildID]

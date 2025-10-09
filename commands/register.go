@@ -77,6 +77,14 @@ func RegisterSlashCommands(s *discordgo.Session) {
 
 	commands.Add(
 		&discordgo.ApplicationCommand{
+			Name:        "clear",
+			Description: "Clear the song queue.",
+		},
+		clearQueue,
+	)
+
+	commands.Add(
+		&discordgo.ApplicationCommand{
 			Name:        "queue",
 			Description: "Show the current song queue.",
 		},

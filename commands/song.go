@@ -413,3 +413,30 @@ func loopQueue(ctx context.Context, s *discordgo.Session, i *discordgo.Interacti
 	})
 	return nil
 }
+
+// clearQueue clears the curreng song queue
+func clearQueue(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate) *interactionError {
+	// Check if user is in a voice channel and bot is not in a different one
+	if !checkUserVoiceChannel(s, i) {
+		return nil
+	}
+
+	gq, ok := queue.GetGuildQueue(i.GuildID)
+	if !ok || gq.Session.VC == nil || gq.CurrentSong == nil {
+		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{Content: "🎶 The queue is empty 😶"},
+		})
+		return nil
+	}
+
+	// Clear the queue and stop current song
+	queue.ClearGuildQueue(i.GuildID)
+
+	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{Content: "🗑️ Queue cleared!"},
+	})
+
+	return nil
+}

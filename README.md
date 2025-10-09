@@ -52,6 +52,7 @@ docker-compose up
 `/np` - Show the song that's now playing.  
 `/sinfo` - Show the song info from a YouTube URL.  
 `/loop` - Toggle loop for the current song queue.  
+`/clear` - Clear the song queue and stop the current song.  
 `/disconnect` - Stop playback and disconnect the bot from the voice channel.  
 `/leave` - Stop playback and disconnect the bot from the voice channel.
 
