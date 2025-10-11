@@ -3,8 +3,10 @@ package yt
 import (
 	"Twilight/redis_client"
 	"Twilight/utils"
+	"bytes"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"time"
 
 	"github.com/kkdai/youtube/v2"
@@ -64,4 +66,30 @@ func (ym *YouTubeManager) DownloadAudio(videoID string) error {
 	}
 
 	return nil
+}
+
+// GetPlaylistVideoIDs returns all video IDs from a YouTube playlist URL
+func (ym *YouTubeManager) GetPlaylistVideoIDs(playlistURL string) ([]string, error) {
+	cmd := exec.Command("yt-dlp", "-j", "--flat-playlist", playlistURL)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+
+	lines := bytes.Split(out, []byte("\n"))
+	videoIDs := []string{}
+	for _, line := range lines {
+		if len(line) == 0 {
+			continue
+		}
+		var entry struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal(line, &entry); err != nil {
+			continue
+		}
+		videoIDs = append(videoIDs, entry.ID)
+	}
+
+	return videoIDs, nil
 }

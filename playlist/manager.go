@@ -4,11 +4,9 @@ import (
 	"Twilight/db_client"
 	"Twilight/queue"
 	"Twilight/redis_client"
-	"Twilight/utils"
 	"Twilight/yt"
 	"fmt"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -300,7 +298,6 @@ func (pm *PlaylistManager) PlaySong(i *discordgo.InteractionCreate, songID strin
 		}
 
 		initialMsg, err = pm.session.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
-			Flags:   1 << 6, // Whisper Flag
 			Content: fmt.Sprintf("Queuing %d song(s) from your playlist...", len(videoIDs)),
 		})
 		if err != nil {
@@ -336,41 +333,9 @@ func (pm *PlaylistManager) PlaySong(i *discordgo.InteractionCreate, songID strin
 // processPlaylistSongs handles downloading and queuing songs
 func (pm *PlaylistManager) processPlaylistSongs(videoIDs []string, i *discordgo.InteractionCreate, vc *discordgo.VoiceConnection, initialMsg *discordgo.Message) {
 	ytManager := yt.NewYouTubeManager(redis_client.RDB)
+	concurrencyLimit := viper.GetInt("youtube.concurrency")
 
-	successCount := 0
-	orderedFilenames := make([]string, len(videoIDs)) // Keeping order of songs
-	var mu sync.Mutex
-	var wg sync.WaitGroup
-	concurrencySem := make(chan struct{}, 3) // Limit maximum amount of downloads at a time
-
-	for idx, videoID := range videoIDs {
-		wg.Add(1)
-		go func(index int, vid string) {
-			defer wg.Done()
-
-			concurrencySem <- struct{}{}
-			defer func() { <-concurrencySem }()
-
-			if err := ytManager.DownloadAudio(vid); err != nil {
-				fmt.Printf("DEBUG: Download error for %s: %v\n", vid, err)
-				return
-			}
-
-			mu.Lock()
-			orderedFilenames[index] = utils.GetAudioFile(vid)
-			successCount++
-			mu.Unlock()
-		}(idx, videoID)
-	}
-	wg.Wait()
-
-	// Filter out empty failed downloads
-	var filenames []string
-	for _, fn := range orderedFilenames {
-		if fn != "" {
-			filenames = append(filenames, fn)
-		}
-	}
+	filenames, successCount := DownloadVideosConcurrently(videoIDs, ytManager, concurrencyLimit)
 
 	if successCount == 0 {
 		failMsg := "Oops! Couldn't download any songs from your playlist. 😅"
@@ -380,14 +345,13 @@ func (pm *PlaylistManager) processPlaylistSongs(videoIDs []string, i *discordgo.
 		return
 	}
 
-	gq, exists := queue.GetGuildQueue(i.GuildID)
-	shouldStartPlayback := !exists || gq.Session.VC == nil || gq.CurrentSong == nil
-
 	for _, filename := range filenames {
 		queue.Enqueue(i.GuildID, filename, i.Member.User.Username)
 	}
 
-	if shouldStartPlayback {
+	gq, _ := queue.GetGuildQueue(i.GuildID)
+
+	if gq.Session.VC == nil {
 		go queue.PlayNext(pm.session, i.GuildID, vc)
 	}
 

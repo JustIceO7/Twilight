@@ -14,17 +14,33 @@ func RegisterSlashCommands(s *discordgo.Session) {
 	commands.Add(
 		&discordgo.ApplicationCommand{
 			Name:        "play",
-			Description: "Play a song from a Youtube URL.",
+			Description: "Play a song from a YouTube URL.",
 			Options: []*discordgo.ApplicationCommandOption{
 				{
 					Type:        discordgo.ApplicationCommandOptionString,
 					Name:        "url",
-					Description: "Youtube link for the song",
+					Description: "YouTube link for the song",
 					Required:    true,
 				},
 			},
 		},
 		playSong,
+	)
+
+	commands.Add(
+		&discordgo.ApplicationCommand{
+			Name:        "playplaylist",
+			Description: "Play a playlist from a YouTube URL.",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "url",
+					Description: "YouTube link for the playlist",
+					Required:    true,
+				},
+			},
+		},
+		playPlaylistSong,
 	)
 
 	commands.Add(
@@ -59,7 +75,7 @@ func RegisterSlashCommands(s *discordgo.Session) {
 				{
 					Type:        discordgo.ApplicationCommandOptionString,
 					Name:        "url",
-					Description: "Youtube link for the song",
+					Description: "YouTube link for the song",
 					Required:    true,
 				},
 			},

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"Twilight/playlist"
 	"Twilight/queue"
 	"Twilight/redis_client"
 	"Twilight/utils"
@@ -105,6 +106,80 @@ func playSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interactio
 		go queue.PlayNext(s, i.GuildID, vc)
 	}
 
+	return nil
+}
+
+// playPlaylistSong plays an entire playlist adding to song queue
+func playPlaylistSong(ctx context.Context, s *discordgo.Session, i *discordgo.InteractionCreate) *interactionError {
+	// Check if user is in a voice channel and bot is not in a different one
+	if !checkUserVoiceChannel(s, i) {
+		return nil
+	}
+
+	_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+	})
+
+	ytManager := yt.NewYouTubeManager(redis_client.RDB)
+
+	videoURL := i.ApplicationCommandData().Options[0].StringValue()
+	videoIDs, err := ytManager.GetPlaylistVideoIDs(videoURL)
+	if err != nil {
+		s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+			Content: "❌ Invalid Playlist link!",
+		})
+		return nil
+	}
+	initialMsg, err := s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+		Content: fmt.Sprintf("Queuing %d song(s) from the playlist...", len(videoIDs)),
+	})
+
+	vc, err := connectUserVoiceChannel(s, i.GuildID, i.Member.User.ID)
+	if err != nil {
+		return nil
+	}
+
+	concurrencyLimit := viper.GetInt("youtube.concurrency")
+	filenames, successCount := playlist.DownloadVideosConcurrently(videoIDs, ytManager, concurrencyLimit)
+
+	if successCount == 0 {
+		failMsg := "Oops! Couldn't download any songs from the playlist. 😅"
+		s.FollowupMessageEdit(i.Interaction, initialMsg.ID, &discordgo.WebhookEdit{
+			Content: &failMsg,
+		})
+		return nil
+	}
+
+	for _, filename := range filenames {
+		queue.Enqueue(i.GuildID, filename, i.Member.User.Username)
+	}
+
+	gq, _ := queue.GetGuildQueue(i.GuildID)
+
+	if gq.Session.VC == nil {
+		go queue.PlayNext(s, i.GuildID, vc)
+	}
+
+	// Update user with final status by editing the initial message
+	var finalContent string
+	if successCount < len(videoIDs) {
+		failedCount := len(videoIDs) - successCount
+		if failedCount == 1 {
+			finalContent = fmt.Sprintf("✅ Added %d songs to queue! (1 song couldn't be played)", successCount)
+		} else {
+			finalContent = fmt.Sprintf("✅ Added %d songs to queue! (%d songs couldn't be played)", successCount, failedCount)
+		}
+	} else {
+		if successCount == 1 {
+			finalContent = "🎵 Song added to queue!"
+		} else {
+			finalContent = fmt.Sprintf("🎵 All `%d` songs added to queue!", successCount)
+		}
+	}
+
+	s.FollowupMessageEdit(i.Interaction, initialMsg.ID, &discordgo.WebhookEdit{
+		Content: &finalContent,
+	})
 	return nil
 }
 

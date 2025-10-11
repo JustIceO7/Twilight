@@ -19,6 +19,7 @@ func HelpEmbedding(s *discordgo.Session, m *discordgo.MessageCreate) {
 			{
 				Name: "__Music Commands__",
 				Value: "`/play <url>` - Play a song from a YouTube URL.\n" +
+					"`/playplaylist <url>` - Play a playlist from a YouTube URL.\n" +
 					"`/pause` - Pause the current song.\n" +
 					"`/resume` - Resume the paused song.\n" +
 					"`/skip` - Skip the current song.\n" +

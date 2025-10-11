@@ -36,6 +36,7 @@ docker-compose up
 
 ### Music Controls
 `/play <url>` - Play a song from a YouTube URL.  
+`/playplaylist <url>` - Play a playlist from a YouTube URL.  
 `/pause` - Pause the current song.  
 `/resume` - Resume the paused song.  
 `/skip` - Skip the current song.  

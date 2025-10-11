@@ -15,4 +15,6 @@ func initDefaults() {
 	// Redis TTL timers in seconds
 	viper.SetDefault("cache.audio", 7200)   // 2 hour
 	viper.SetDefault("cache.youtube", 3600) // 1 hour
+
+	viper.SetDefault("youtube.concurrency", 3) // Max concurrent downloads when downloading from YouTube concurrently
 }
