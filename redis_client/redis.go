@@ -2,6 +2,7 @@ package redis_client
 
 import (
 	"context"
+	"os"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -13,6 +14,6 @@ var (
 
 func init() {
 	RDB = redis.NewClient(&redis.Options{
-		Addr: "redis:6379",
+		Addr: os.Getenv("redis_address"),
 	})
 }
