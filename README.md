@@ -52,6 +52,7 @@ docker-compose up
 ### Playlist Management
 `/playlist view` - View your playlist.  
 `/playlist add <song>` - Add a song to your playlist (YouTube video ID).  
+`/playlist addplaylist <playlist>` - Add all songs from a YouTube playlist.  
 `/playlist remove <song>` - Remove a song from your playlist (YouTube video ID).  
 `/playlist clear` - Clear your playlist.  
 `/playlist play [song]` - Play a song from your playlist or the entire playlist (optional YouTube video ID).

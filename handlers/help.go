@@ -38,6 +38,7 @@ func HelpEmbedding(s *discordgo.Session, m *discordgo.MessageCreate) {
 				Value: "`/playlist view` - View your playlist.\n" +
 					"`/playlist add <song>` - Add a song to your playlist (YouTube video ID).\n" +
 					"`/playlist remove <song>` - Remove a song from your playlist (YouTube video ID).\n" +
+					"`/playlist addplaylist <playlist>` - Add all songs from a YouTube playlist.\n" +
 					"`/playlist clear` - Clear your playlist.\n" +
 					"`/playlist play [song]` - Play a song from your playlist or the entire playlist (optional YouTube video ID).",
 				Inline: false,

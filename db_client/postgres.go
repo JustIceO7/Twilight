@@ -7,6 +7,7 @@ import (
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 var (
@@ -24,7 +25,9 @@ func Init() {
 
 	var err error
 	for range 10 {
-		DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+		DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
+			Logger: logger.Default.LogMode(logger.Silent),
+		})
 		if err == nil {
 			sqlDB, _ := DB.DB()
 			if pingErr := sqlDB.Ping(); pingErr == nil {

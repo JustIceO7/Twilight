@@ -16,7 +16,8 @@ CREATE TABLE IF NOT EXISTS songs (
 
 CREATE TABLE IF NOT EXISTS playlists (
     user_id BIGINT REFERENCES users(user_id) ON DELETE CASCADE,
-    song_id TEXT REFERENCES songs(id) ON DELETE CASCADE
+    song_id TEXT REFERENCES songs(id) ON DELETE CASCADE,
+    PRIMARY KEY (user_id, song_id)
 );
 
 CREATE INDEX IF NOT EXISTS playlists_by_user ON playlists(user_id);

@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/kkdai/youtube/v2"
 	"github.com/redis/go-redis/v9"
 	"github.com/spf13/viper"
 )
@@ -32,11 +31,11 @@ func NewYouTubeManager(rdb *redis.Client) *YouTubeManager {
 }
 
 // GetVideoMetadata fetches YouTube video metadata given videoID
-func (ym *YouTubeManager) GetVideoMetadata(videoID string) (*youtube.Video, error) {
+func (ym *YouTubeManager) GetVideoMetadata(videoID string) (*Video, error) {
 	// Try Redis
 	cached, err := ym.redis.Get(redis_client.Ctx, "ytmeta:"+videoID).Result()
 	if err == nil && cached != "" {
-		var video youtube.Video
+		var video Video
 		json.Unmarshal([]byte(cached), &video)
 		return &video, nil
 	}

@@ -38,7 +38,7 @@ func songInfo(ctx context.Context, s *discordgo.Session, i *discordgo.Interactio
 		Title:       videoMetadata.Title,
 		URL:         videoURL,
 		Description: videoMetadata.Description,
-		Thumbnail:   &discordgo.MessageEmbedThumbnail{URL: videoMetadata.Thumbnails[0].URL},
+		Thumbnail:   &discordgo.MessageEmbedThumbnail{URL: videoMetadata.Thumbnail},
 		Color:       viper.GetInt("theme"),
 	}
 
@@ -316,10 +316,8 @@ func currentSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interac
 		return nil
 	}
 
-	thumbnailURL := ""
-	if len(currentVideo.Thumbnails) > 0 {
-		thumbnailURL = currentVideo.Thumbnails[0].URL
-	}
+	thumbnailURL := currentVideo.Thumbnail
+
 	videoURL := fmt.Sprintf("https://www.youtube.com/watch?v=%s", currentID)
 
 	embed := &discordgo.MessageEmbed{
@@ -330,34 +328,33 @@ func currentSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interac
 		Color:       viper.GetInt("theme"),
 	}
 
-	if len(gq.Songs) > 0 {
-		queueText := "**Up Next:**\n"
-		queueLimit := len(gq.Songs)
-		if queueLimit > 5 {
-			queueLimit = 5
+	queueText := "**Up Next:**\n"
+	queueLen := len(gq.Songs)
+	queueLimit := 5
+	if queueLen > queueLimit {
+		queueLen = queueLimit
+	}
+	for idx, item := range gq.Songs[:queueLen] {
+		itemID := utils.GetAudioID(item.Filename)
+		video, err := ytManager.GetVideoMetadata(itemID)
+		if err != nil {
+			sendFetchErrorResponse(s, i)
+			return nil
 		}
-		for idx, item := range gq.Songs[:queueLimit] {
-			itemID := utils.GetAudioID(item.Filename)
-			video, err := ytManager.GetVideoMetadata(itemID)
-			if err != nil {
-				sendFetchErrorResponse(s, i)
-				return nil
-			}
-			queueText += fmt.Sprintf("%d. `%s` (requested by %s)\n", idx+1, video.Title, item.RequestedBy)
-		}
-		if len(gq.Songs) > 5 {
-			queueText += fmt.Sprintf("...and %d more", len(gq.Songs)-5)
-		}
-		looped := "🔁"
-		if !gq.Loop {
-			looped = ""
-		}
-		embed.Fields = []*discordgo.MessageEmbedField{
-			{
-				Name:  fmt.Sprintf("Queue %s", looped),
-				Value: queueText,
-			},
-		}
+		queueText += fmt.Sprintf("%d. `%s` (requested by %s)\n", idx+1, video.Title, item.RequestedBy)
+	}
+	if len(gq.Songs) > queueLimit {
+		queueText += fmt.Sprintf("...and %d more", len(gq.Songs)-queueLimit)
+	}
+	looped := "🔁"
+	if !gq.Loop {
+		looped = ""
+	}
+	embed.Fields = []*discordgo.MessageEmbedField{
+		{
+			Name:  fmt.Sprintf("Queue %s", looped),
+			Value: queueText,
+		},
 	}
 
 	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -401,7 +398,13 @@ func currentQueue(ctx context.Context, s *discordgo.Session, i *discordgo.Intera
 	}
 	queueText += fmt.Sprintf("1. `%s` (requested by %s) ▶️\n", currentVideo.Title, gq.CurrentSong.RequestedBy)
 
-	for idx, item := range gq.Songs {
+	queueLen := len(gq.Songs)
+	queueLimit := 10
+	if queueLen > queueLimit {
+		queueLen = queueLimit
+	}
+
+	for idx, item := range gq.Songs[:queueLen] {
 		itemID := utils.GetAudioID(item.Filename)
 		video, err := ytManager.GetVideoMetadata(itemID)
 		if err != nil {
@@ -410,6 +413,11 @@ func currentQueue(ctx context.Context, s *discordgo.Session, i *discordgo.Intera
 		}
 		queueText += fmt.Sprintf("%d. `%s` (requested by %s)\n", idx+2, video.Title, item.RequestedBy)
 	}
+
+	if len(gq.Songs) > queueLimit {
+		queueText += fmt.Sprintf("...and %d more", len(gq.Songs)-queueLimit)
+	}
+
 	looped := "🔁"
 	if !gq.Loop {
 		looped = ""

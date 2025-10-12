@@ -148,6 +148,19 @@ func RegisterSlashCommands(s *discordgo.Session) {
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "addplaylist",
+					Description: "Add a full YouTube playlist to your playlist",
+					Options: []*discordgo.ApplicationCommandOption{
+						{
+							Type:        discordgo.ApplicationCommandOptionString,
+							Name:        "url",
+							Description: "YouTube playlist URL",
+							Required:    true,
+						},
+					},
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
 					Name:        "remove",
 					Description: "Remove a song from your playlist",
 					Options: []*discordgo.ApplicationCommandOption{

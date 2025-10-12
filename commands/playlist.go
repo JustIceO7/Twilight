@@ -33,6 +33,8 @@ func playList(ctx context.Context, s *discordgo.Session, i *discordgo.Interactio
 		pm.ShowPlaylist(i)
 	case "add":
 		pm.AddSong(i, value)
+	case "addplaylist":
+		pm.AddPlaylist(i, value)
 	case "remove":
 		pm.RemoveSong(i, value)
 	case "clear":
