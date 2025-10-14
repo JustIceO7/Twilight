@@ -17,6 +17,12 @@ import (
 // DownloadAudioFile downloads the audio from a given videoID directly to a file
 func DownloadAudioFile(videoID string) error {
 	filename := utils.GetAudioFile(videoID)
+
+	err := youTubeDownload(videoID, filename)
+	if err == nil {
+		return nil
+	}
+
 	cmd := exec.Command("yt-dlp",
 		"-f", "bestaudio/best",
 		"-x",
@@ -25,11 +31,6 @@ func DownloadAudioFile(videoID string) error {
 		"-o", filename,
 		"https://www.youtube.com/watch?v="+videoID,
 	)
-
-	err := youTubeDownload(videoID, filename)
-	if err == nil {
-		return nil
-	}
 
 	stderr := &bytes.Buffer{}
 	cmd.Stderr = stderr
