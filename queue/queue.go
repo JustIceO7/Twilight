@@ -198,11 +198,6 @@ type QueueSong struct {
 	RequestedBy string // Username of who requested the song
 }
 
-var (
-	guildSongs    = make(map[string]*QueueData)   // Maps guild ID to its queue data
-	guildSessions = make(map[string]*SessionData) // Maps guild ID to its audio session
-)
-
 type QueueData struct {
 	Songs       []*QueueSong // List of queued songs
 	CurrentSong *QueueSong   // Currently playing song
@@ -223,9 +218,97 @@ type GuildQueue struct {
 	mu          sync.Mutex    // Mutex to protect concurrent access
 }
 
+// GuildManager manages all guild queues and sessions
+type GuildManager struct {
+	mu       sync.RWMutex
+	songs    map[string]*QueueData   // Maps guild ID to its queue data
+	sessions map[string]*SessionData // Maps guild ID to its audio session
+}
+
+var guildManager = &GuildManager{
+	songs:    make(map[string]*QueueData),
+	sessions: make(map[string]*SessionData),
+}
+
+// GetOrCreateQueue returns QueueData if exists otherwise initializes one
+func (gm *GuildManager) GetOrCreateQueue(guildID string) *QueueData {
+	gm.mu.Lock()
+	defer gm.mu.Unlock()
+
+	qd, exists := gm.songs[guildID]
+	if !exists {
+		qd = &QueueData{Songs: []*QueueSong{}}
+		gm.songs[guildID] = qd
+	}
+	return qd
+}
+
+// GetOrCreateSession returns SessionData if exists otherwise initializes one
+func (gm *GuildManager) GetOrCreateSession(guildID string) *SessionData {
+	gm.mu.Lock()
+	defer gm.mu.Unlock()
+
+	sd, exists := gm.sessions[guildID]
+	if !exists {
+		sd = &SessionData{Session: &AudioSession{}}
+		gm.sessions[guildID] = sd
+	}
+	return sd
+}
+
+// GetQueue returns QueueData if exists
+func (gm *GuildManager) GetQueue(guildID string) (*QueueData, bool) {
+	gm.mu.RLock()
+	defer gm.mu.RUnlock()
+	qd, exists := gm.songs[guildID]
+	return qd, exists
+}
+
+// GetSession returns SessionData if exists
+func (gm *GuildManager) GetSession(guildID string) (*SessionData, bool) {
+	gm.mu.RLock()
+	defer gm.mu.RUnlock()
+	sd, exists := gm.sessions[guildID]
+	return sd, exists
+}
+
+// DeleteGuild deletes guildID from GuildManager
+func (gm *GuildManager) DeleteGuild(guildID string) {
+	gm.mu.Lock()
+	sd, exists := gm.sessions[guildID]
+	if exists {
+		delete(gm.sessions, guildID)
+	}
+	delete(gm.songs, guildID)
+	gm.mu.Unlock()
+
+	if exists {
+		sd.mu.Lock()
+		if sd.Session != nil && !sd.Session.stopped {
+			sd.Session.Stop()
+		}
+		sd.mu.Unlock()
+	}
+}
+
+// StopAll stops all sessions from GuildManager
+func (gm *GuildManager) StopAll() {
+	gm.mu.Lock()
+	for _, sd := range gm.sessions {
+		sd.mu.Lock()
+		if sd.Session != nil && !sd.Session.stopped {
+			sd.Session.Stop()
+		}
+		sd.mu.Unlock()
+	}
+	gm.songs = make(map[string]*QueueData)
+	gm.sessions = make(map[string]*SessionData)
+	gm.mu.Unlock()
+}
+
 // ShuffleGuildQueue shuffles the song queue for a given guild
 func ShuffleGuildQueue(guildID string) error {
-	qd, exists := guildSongs[guildID]
+	qd, exists := guildManager.GetQueue(guildID)
 	if !exists {
 		return fmt.Errorf("no queue for guild %s", guildID)
 	}
@@ -241,7 +324,7 @@ func ShuffleGuildQueue(guildID string) error {
 
 // LoopGuildQueue toggles loop for the song queue for a given guild
 func LoopGuildQueue(guildID string) (bool, error) {
-	qd, exists := guildSongs[guildID]
+	qd, exists := guildManager.GetQueue(guildID)
 	if !exists {
 		return false, fmt.Errorf("no queue for guild %s", guildID)
 	}
@@ -254,21 +337,17 @@ func LoopGuildQueue(guildID string) (bool, error) {
 
 // Enqueue queues a song into the queue for a given guild
 func Enqueue(guildID, filename, username string) *GuildQueue {
-	qd, exists := guildSongs[guildID]
-	if !exists {
-		qd = &QueueData{Songs: []*QueueSong{}}
-		guildSongs[guildID] = qd
-	}
-
-	// Ensure SessionData exists
-	sd, exists := guildSessions[guildID]
-	if !exists {
-		sd = &SessionData{Session: &AudioSession{}}
-		guildSessions[guildID] = sd
-	}
+	qd := guildManager.GetOrCreateQueue(guildID)
+	sd := guildManager.GetOrCreateSession(guildID)
 
 	qd.mu.Lock()
-	defer qd.mu.Unlock()
+	qd.Songs = append(qd.Songs, &QueueSong{
+		Filename:    filename,
+		RequestedBy: username,
+	})
+	songsCopy := qd.Songs
+	currentCopy := qd.CurrentSong
+	qd.mu.Unlock()
 
 	sd.mu.Lock()
 	if sd.Session.stopped {
@@ -276,26 +355,19 @@ func Enqueue(guildID, filename, username string) *GuildQueue {
 	}
 	sd.mu.Unlock()
 
-	qd.Songs = append(qd.Songs, &QueueSong{
-		Filename:    filename,
-		RequestedBy: username,
-	})
-
 	return &GuildQueue{
-		Songs:       qd.Songs,
-		CurrentSong: qd.CurrentSong,
+		Songs:       songsCopy,
+		CurrentSong: currentCopy,
+		Loop:        qd.Loop,
 		Session:     sd.Session,
 	}
 }
 
 // playNext plays the next song in the guilds song queue
 func PlayNext(s *discordgo.Session, guildID string, vc *discordgo.VoiceConnection) {
-	qd, exists := guildSongs[guildID]
-	if !exists {
-		return
-	}
-	sd, exists := guildSessions[guildID]
-	if !exists {
+	qd, qExists := guildManager.GetQueue(guildID)
+	sd, sExists := guildManager.GetSession(guildID)
+	if !qExists || !sExists {
 		return
 	}
 	ytManager := yt.NewYouTubeManager(redis_client.RDB)
@@ -343,17 +415,13 @@ func PlayNext(s *discordgo.Session, guildID string, vc *discordgo.VoiceConnectio
 
 // GetGuildQueue returns the full queue for a given guild
 func GetGuildQueue(guildID string) (*GuildQueue, bool) {
-	qd, qExists := guildSongs[guildID]
-	sd, sExists := guildSessions[guildID]
+	qd, qExists := guildManager.GetQueue(guildID)
+	sd, sExists := guildManager.GetSession(guildID)
 	if !qExists || !sExists {
 		return nil, false
 	}
 
 	qd.mu.Lock()
-	defer qd.mu.Unlock()
-	sd.mu.Lock()
-	defer sd.mu.Unlock()
-
 	songsCopy := make([]*QueueSong, len(qd.Songs))
 	copy(songsCopy, qd.Songs)
 
@@ -361,6 +429,7 @@ func GetGuildQueue(guildID string) (*GuildQueue, bool) {
 	if qd.CurrentSong != nil {
 		currentCopy = qd.CurrentSong
 	}
+	qd.mu.Unlock()
 
 	return &GuildQueue{
 		Songs:       songsCopy,
@@ -372,22 +441,14 @@ func GetGuildQueue(guildID string) (*GuildQueue, bool) {
 
 // DeleteGuildQueue removes the guild from guildSongs and guildSessions
 func DeleteGuildQueue(guildID string) {
-	if sd, exists := guildSessions[guildID]; exists {
-		sd.mu.Lock()
-		if sd.Session != nil && !sd.Session.stopped {
-			sd.Session.Stop()
-		}
-		sd.mu.Unlock()
-		delete(guildSessions, guildID)
-	}
-	delete(guildSongs, guildID)
+	guildManager.DeleteGuild(guildID)
 }
 
 // ClearGuildQueue stops the current song and clears all queued songs for a guild
 func ClearGuildQueue(guildID string) {
-	qd, exists := guildSongs[guildID]
-	sd, sExists := guildSessions[guildID]
-	if !exists || !sExists {
+	qd, qExists := guildManager.GetQueue(guildID)
+	sd, sExists := guildManager.GetSession(guildID)
+	if !qExists || !sExists {
 		return
 	}
 
@@ -407,7 +468,7 @@ func ClearGuildQueue(guildID string) {
 
 // ClearCurrentSong clears the currently playing item for a guild
 func ClearCurrentSong(guildID string) {
-	qd, exists := guildSongs[guildID]
+	qd, exists := guildManager.GetQueue(guildID)
 	if !exists {
 		return
 	}
@@ -419,24 +480,5 @@ func ClearCurrentSong(guildID string) {
 
 // StopAllSessions clears data for all guilds and closes all Sessions
 func StopAllSessions() {
-	// Stop all sessions
-	for _, sd := range guildSessions {
-		if sd != nil {
-			sd.mu.Lock()
-			if sd.Session != nil && !sd.Session.stopped {
-				sd.Session.Stop()
-			}
-			sd.mu.Unlock()
-		}
-	}
-
-	// Clear all queue data
-	for guildID := range guildSongs {
-		delete(guildSongs, guildID)
-	}
-
-	// Clear all session data
-	for guildID := range guildSessions {
-		delete(guildSessions, guildID)
-	}
+	guildManager.StopAll()
 }

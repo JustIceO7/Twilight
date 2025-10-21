@@ -76,8 +76,10 @@ func TestAudioSession_StopTwice(t *testing.T) {
 }
 
 func TestEnqueue(t *testing.T) {
-	guildSongs = make(map[string]*QueueData)
-	guildSessions = make(map[string]*SessionData)
+	guildManager = &GuildManager{
+		songs:    make(map[string]*QueueData),
+		sessions: make(map[string]*SessionData),
+	}
 
 	guildID := "test-guild-123"
 	filename := "cache/test-song.opus"
@@ -93,8 +95,10 @@ func TestEnqueue(t *testing.T) {
 }
 
 func TestEnqueue_MultipleSongs(t *testing.T) {
-	guildSongs = make(map[string]*QueueData)
-	guildSessions = make(map[string]*SessionData)
+	guildManager = &GuildManager{
+		songs:    make(map[string]*QueueData),
+		sessions: make(map[string]*SessionData),
+	}
 
 	guildID := "test-guild-123"
 
@@ -111,8 +115,10 @@ func TestEnqueue_MultipleSongs(t *testing.T) {
 }
 
 func TestGetGuildQueue(t *testing.T) {
-	guildSongs = make(map[string]*QueueData)
-	guildSessions = make(map[string]*SessionData)
+	guildManager = &GuildManager{
+		songs:    make(map[string]*QueueData),
+		sessions: make(map[string]*SessionData),
+	}
 
 	guildID := "test-guild-123"
 
@@ -127,8 +133,10 @@ func TestGetGuildQueue(t *testing.T) {
 }
 
 func TestGetGuildQueue_NonExistent(t *testing.T) {
-	guildSongs = make(map[string]*QueueData)
-	guildSessions = make(map[string]*SessionData)
+	guildManager = &GuildManager{
+		songs:    make(map[string]*QueueData),
+		sessions: make(map[string]*SessionData),
+	}
 
 	guildID := "non-existent-guild"
 
@@ -139,13 +147,15 @@ func TestGetGuildQueue_NonExistent(t *testing.T) {
 }
 
 func TestClearCurrentSong(t *testing.T) {
-	guildSongs = make(map[string]*QueueData)
-	guildSessions = make(map[string]*SessionData)
+	guildManager = &GuildManager{
+		songs:    make(map[string]*QueueData),
+		sessions: make(map[string]*SessionData),
+	}
 
 	guildID := "test-guild-clear"
 	Enqueue(guildID, "cache/song1.opus", "user1")
 
-	qd := guildSongs[guildID]
+	qd, _ := guildManager.GetQueue(guildID)
 	qd.mu.Lock()
 	qd.CurrentSong = &QueueSong{Filename: "cache/current.opus", RequestedBy: "user"}
 	qd.mu.Unlock()
@@ -159,7 +169,10 @@ func TestClearCurrentSong(t *testing.T) {
 }
 
 func TestClearCurrentSong_NonExistent(t *testing.T) {
-	guildSongs = make(map[string]*QueueData)
+	guildManager = &GuildManager{
+		songs:    make(map[string]*QueueData),
+		sessions: make(map[string]*SessionData),
+	}
 
 	// Should not panic
 	assert.NotPanics(t, func() {
@@ -168,48 +181,67 @@ func TestClearCurrentSong_NonExistent(t *testing.T) {
 }
 
 func TestDeleteGuildQueue(t *testing.T) {
-	guildSongs = make(map[string]*QueueData)
-	guildSessions = make(map[string]*SessionData)
+	guildManager = &GuildManager{
+		songs:    make(map[string]*QueueData),
+		sessions: make(map[string]*SessionData),
+	}
 
 	guildID := "test-guild-delete"
 	Enqueue(guildID, "cache/song1.opus", "user1")
 
-	_, exists := guildSongs[guildID]
+	guildManager.mu.RLock()
+	_, exists := guildManager.songs[guildID]
+	guildManager.mu.RUnlock()
 	assert.True(t, exists)
 
 	DeleteGuildQueue(guildID)
 
-	_, exists = guildSongs[guildID]
+	guildManager.mu.RLock()
+	_, exists = guildManager.songs[guildID]
+	guildManager.mu.RUnlock()
 	assert.False(t, exists)
 
-	_, exists = guildSessions[guildID]
+	guildManager.mu.RLock()
+	_, exists = guildManager.sessions[guildID]
+	guildManager.mu.RUnlock()
 	assert.False(t, exists)
 }
 
 func TestStopAllSessions(t *testing.T) {
-	guildSongs = make(map[string]*QueueData)
-	guildSessions = make(map[string]*SessionData)
+	guildManager = &GuildManager{
+		songs:    make(map[string]*QueueData),
+		sessions: make(map[string]*SessionData),
+	}
 
 	Enqueue("guild1", "cache/song1.opus", "user1")
 	Enqueue("guild2", "cache/song2.opus", "user2")
 	Enqueue("guild3", "cache/song3.opus", "user3")
 
-	assert.Equal(t, 3, len(guildSongs))
+	guildManager.mu.RLock()
+	songCount := len(guildManager.songs)
+	guildManager.mu.RUnlock()
+	assert.Equal(t, 3, songCount)
 
 	StopAllSessions()
 
-	assert.Equal(t, 0, len(guildSongs))
-	assert.Equal(t, 0, len(guildSessions))
+	guildManager.mu.RLock()
+	songCount = len(guildManager.songs)
+	sessionCount := len(guildManager.sessions)
+	guildManager.mu.RUnlock()
+	assert.Equal(t, 0, songCount)
+	assert.Equal(t, 0, sessionCount)
 }
 
 func TestLoopGuildQueue(t *testing.T) {
-	guildSongs = make(map[string]*QueueData)
-	guildSessions = make(map[string]*SessionData)
+	guildManager = &GuildManager{
+		songs:    make(map[string]*QueueData),
+		sessions: make(map[string]*SessionData),
+	}
 
 	guildID := "test-guild-loop"
 	Enqueue(guildID, "cache/song1.opus", "user1")
 
-	qd := guildSongs[guildID]
+	qd, _ := guildManager.GetQueue(guildID)
 	qd.mu.Lock()
 	initialLoop := qd.Loop
 	qd.mu.Unlock()
@@ -225,15 +257,21 @@ func TestLoopGuildQueue(t *testing.T) {
 }
 
 func TestLoopGuildQueue_NonExistent(t *testing.T) {
-	guildSongs = make(map[string]*QueueData)
+	guildManager = &GuildManager{
+		songs:    make(map[string]*QueueData),
+		sessions: make(map[string]*SessionData),
+	}
 
-	_, err := LoopGuildQueue("non-existent-guild")
+	loopState, err := LoopGuildQueue("non-existent-guild")
 	assert.Error(t, err)
+	assert.False(t, loopState)
 }
 
 func TestShuffleGuildQueue(t *testing.T) {
-	guildSongs = make(map[string]*QueueData)
-	guildSessions = make(map[string]*SessionData)
+	guildManager = &GuildManager{
+		songs:    make(map[string]*QueueData),
+		sessions: make(map[string]*SessionData),
+	}
 
 	guildID := "test-guild-shuffle"
 
@@ -242,7 +280,7 @@ func TestShuffleGuildQueue(t *testing.T) {
 		Enqueue(guildID, "cache/song"+string(rune(i))+".opus", "user")
 	}
 
-	qd := guildSongs[guildID]
+	qd, _ := guildManager.GetQueue(guildID)
 	qd.mu.Lock()
 	originalOrder := make([]string, len(qd.Songs))
 	for i, song := range qd.Songs {
@@ -273,21 +311,26 @@ func TestShuffleGuildQueue(t *testing.T) {
 }
 
 func TestShuffleGuildQueue_NonExistent(t *testing.T) {
-	guildSongs = make(map[string]*QueueData)
+	guildManager = &GuildManager{
+		songs:    make(map[string]*QueueData),
+		sessions: make(map[string]*SessionData),
+	}
 
 	err := ShuffleGuildQueue("non-existent-guild")
 	assert.Error(t, err)
 }
 
 func TestEnqueue_StoppedSession(t *testing.T) {
-	guildSongs = make(map[string]*QueueData)
-	guildSessions = make(map[string]*SessionData)
+	guildManager = &GuildManager{
+		songs:    make(map[string]*QueueData),
+		sessions: make(map[string]*SessionData),
+	}
 
 	guildID := "test-guild-stopped"
 
 	// Create initial session and mark it as stopped
 	Enqueue(guildID, "cache/song1.opus", "user1")
-	sd := guildSessions[guildID]
+	sd, _ := guildManager.GetSession(guildID)
 	sd.mu.Lock()
 	sd.Session.stopped = true
 	sd.mu.Unlock()

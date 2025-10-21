@@ -331,7 +331,7 @@ func (pm *PlaylistManager) PlaySong(i *discordgo.InteractionCreate, songID strin
 		}
 
 		initialMsg, err = pm.session.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
-			Content: fmt.Sprintf("Queuing %d song(s) from your playlist...", len(videoIDs)),
+			Content: fmt.Sprintf("Queuing `%d` song(s) from your playlist...", len(videoIDs)),
 		})
 		if err != nil {
 			fmt.Printf("Failed to create initial message: %v\n", err)
@@ -391,9 +391,9 @@ func (pm *PlaylistManager) processPlaylistSongs(videoIDs []string, i *discordgo.
 	if successCount < len(videoIDs) {
 		failedCount := len(videoIDs) - successCount
 		if failedCount == 1 {
-			finalContent = fmt.Sprintf("✅ Added %d songs to queue! (1 song couldn't be played)", successCount)
+			finalContent = fmt.Sprintf("✅ Added `%d` songs to queue! (`1` song couldn't be played)", successCount)
 		} else {
-			finalContent = fmt.Sprintf("✅ Added %d songs to queue! (%d songs couldn't be played)", successCount, failedCount)
+			finalContent = fmt.Sprintf("✅ Added `%d` songs to queue! (`%d` songs couldn't be played)", successCount, failedCount)
 		}
 	} else {
 		if successCount == 1 {

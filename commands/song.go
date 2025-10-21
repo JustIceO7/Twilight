@@ -302,6 +302,10 @@ func currentSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interac
 		return nil
 	}
 
+	_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+	})
+
 	currentSong := gq.CurrentSong
 	status := "▶️ Playing"
 	if gq.Session.IsPaused() {
@@ -312,7 +316,10 @@ func currentSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interac
 	currentID := utils.GetAudioID(currentSong.Filename)
 	currentVideo, err := ytManager.GetVideoMetadata(currentID)
 	if err != nil {
-		sendFetchErrorResponse(s, i)
+		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{Content: "🎶 The queue is empty 😶"},
+		})
 		return nil
 	}
 
@@ -338,7 +345,10 @@ func currentSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interac
 		itemID := utils.GetAudioID(item.Filename)
 		video, err := ytManager.GetVideoMetadata(itemID)
 		if err != nil {
-			sendFetchErrorResponse(s, i)
+			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{Content: "🎶 The queue is empty 😶"},
+			})
 			return nil
 		}
 		queueText += fmt.Sprintf("%d. `%s` (requested by %s)\n", idx+1, video.Title, item.RequestedBy)
@@ -357,11 +367,8 @@ func currentSong(ctx context.Context, s *discordgo.Session, i *discordgo.Interac
 		},
 	}
 
-	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{
-			Embeds: []*discordgo.MessageEmbed{embed},
-		},
+	s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+		Embeds: []*discordgo.MessageEmbed{embed},
 	})
 	return nil
 }
@@ -382,6 +389,10 @@ func currentQueue(ctx context.Context, s *discordgo.Session, i *discordgo.Intera
 		return nil
 	}
 
+	_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+	})
+
 	guild, _ := s.Guild(i.GuildID)
 	embed := &discordgo.MessageEmbed{
 		Title: fmt.Sprintf("🎶 Queue for `%s`", guild.Name),
@@ -393,7 +404,9 @@ func currentQueue(ctx context.Context, s *discordgo.Session, i *discordgo.Intera
 	currentID := utils.GetAudioID(gq.CurrentSong.Filename)
 	currentVideo, err := ytManager.GetVideoMetadata(currentID)
 	if err != nil {
-		sendFetchErrorResponse(s, i)
+		s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+			Content: "❌ Failed to fetch video details.",
+		})
 		return nil
 	}
 	queueText += fmt.Sprintf("1. `%s` (requested by %s) ▶️\n", currentVideo.Title, gq.CurrentSong.RequestedBy)
@@ -408,7 +421,9 @@ func currentQueue(ctx context.Context, s *discordgo.Session, i *discordgo.Intera
 		itemID := utils.GetAudioID(item.Filename)
 		video, err := ytManager.GetVideoMetadata(itemID)
 		if err != nil {
-			sendFetchErrorResponse(s, i)
+			s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+				Content: "❌ Failed to fetch video details.",
+			})
 			return nil
 		}
 		queueText += fmt.Sprintf("%d. `%s` (requested by %s)\n", idx+2, video.Title, item.RequestedBy)
@@ -429,11 +444,8 @@ func currentQueue(ctx context.Context, s *discordgo.Session, i *discordgo.Intera
 		},
 	}
 
-	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{
-			Embeds: []*discordgo.MessageEmbed{embed},
-		},
+	s.FollowupMessageCreate(i.Interaction, true, &discordgo.WebhookParams{
+		Embeds: []*discordgo.MessageEmbed{embed},
 	})
 	return nil
 }
